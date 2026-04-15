@@ -4,7 +4,7 @@
 调整后的脚本最终输出格式：
 🇯🇵 日本 01 1x AnyTLS
 排序优先级：地区、倍率、协议
-
+脚本链接：https://cdn.jsdelivr.net/gh/schmidttt/surge@main/sub_store_rename.js
 #### 注：
 自用规则备份，仅供参考不作他用
 未经允许禁止转载与传播,此库仅为个人备份

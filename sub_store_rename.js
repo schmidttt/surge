@@ -253,28 +253,6 @@ const PROTOCOL_PRIORITY_MAP = Object.fromEntries(
   PROTOCOL_PREFERENCE_ORDER.map((name, idx) => [name, idx])
 );
 
-// ==================== 协议简称映射 ====================
-const PROTOCOL_SHORT_MAP = {
-  "AnyTLS": "AT",
-  "Hysteria2": "HY2",
-  "TUIC": "TUIC",
-  "Hysteria": "HY",
-  "VLESS": "VL",
-  "Trojan": "TR",
-  "WireGuard": "WG",
-  "Juicity": "JC",
-  "Naive": "NV",
-  "VMess": "VM",
-  "SS": "SS",
-  "SSR": "SSR",
-  "SOCKS5": "S5",
-  "HTTP": "HT",
-  "HTTPS": "HS",
-  "Snell": "SN",
-  "Brook": "BK",
-  "SSH": "SSH"
-};
-
 // ==================== 数据表 ====================
 // prettier-ignore
 const FG = ['🇭🇰','🇲🇴','🇹🇼','🇯🇵','🇰🇷','🇸🇬','🇺🇸','🇬🇧','🇫🇷','🇩🇪','🇦🇺','🇦🇪','🇦🇫','🇦🇱','🇩🇿','🇦🇴','🇦🇷','🇦🇲','🇦🇹','🇦🇿','🇧🇭','🇧🇩','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹','🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇻🇬','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇰🇭','🇨🇲','🇨🇦','🇨🇻','🇰🇾','🇨🇫','🇹🇩','🇨🇱','🇨🇴','🇰🇲','🇨🇬','🇨🇩','🇨🇷','🇭🇷','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇴','🇪🇨','🇪🇬','🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇪🇹','🇫🇯','🇫🇮','🇬🇦','🇬🇲','🇬🇪','🇬🇭','🇬🇷','🇬🇱','🇬🇹','🇬🇳','🇬🇾','🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇲','🇮🇱','🇮🇹','🇨🇮','🇯🇲','🇯🇴','🇰🇿','🇰🇪','🇰🇼','🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇹','🇱🇺','🇲🇰','🇲🇬','🇲🇼','🇲🇾','🇲🇻','🇲🇱','🇲🇹','🇲🇷','🇲🇺','🇲🇽','🇲🇩','🇲🇨','🇲🇳','🇲🇪','🇲🇦','🇲🇿','🇲🇲','🇳🇦','🇳🇵','🇳🇱','🇳🇿','🇳🇮','🇳🇪','🇳🇬','🇰🇵','🇳🇴','🇴🇲','🇵🇰','🇵🇦','🇵🇾','🇵🇪','🇵🇭','🇵🇹','🇵🇷','🇶🇦','🇷🇴','🇷🇺','🇷🇼','🇸🇲','🇸🇦','🇸🇳','🇷🇸','🇸🇱','🇸🇰','🇸🇮','🇸🇴','🇿🇦','🇪🇸','🇱🇰','🇸🇩','🇸🇷','🇸🇿','🇸🇪','🇨🇭','🇸🇾','🇹🇯','🇹🇿','🇹🇭','🇹🇬','🇹🇴','🇹🇹','🇹🇳','🇹🇷','🇹🇲','🇻🇮','🇺🇬','🇺🇦','🇺🇾','🇺🇿','🇻🇪','🇻🇳','🇾🇪','🇿🇲','🇿🇼','🇦🇩','🇷🇪','🇵🇱','🇬🇺','🇻🇦','🇱🇮','🇨🇼','🇸🇨','🇦🇶','🇬🇮','🇨🇺','🇫🇴','🇦🇽','🇧🇲','🇹🇱'];
@@ -417,41 +395,48 @@ function matchWithBoundary(name, key) {
   return re.test(name);
 }
 
-function getProtocolName(proxy) {
-  const raw = String(proxy.type || proxy.protocol || "").trim().toLowerCase();
-  const protoMap = {
-    ss: "SS",
-    shadowsocks: "SS",
-    ssr: "SSR",
-    shadowsocksr: "SSR",
-    vmess: "VMess",
-    vless: "VLESS",
-    trojan: "Trojan",
-    hysteria: "Hysteria",
-    hysteria2: "Hysteria2",
-    hy2: "Hysteria2",
-    tuic: "TUIC",
-    wireguard: "WireGuard",
-    wg: "WireGuard",
-    snell: "Snell",
-    http: "HTTP",
-    https: "HTTPS",
-    socks: "SOCKS5",
-    socks5: "SOCKS5",
-    naive: "Naive",
-    juicity: "Juicity",
-    anytls: "AnyTLS",
-    brook: "Brook",
-    ssh: "SSH"
-  };
-  if (!raw) return "";
-  return protoMap[raw] || raw.toUpperCase();
-}
+function normalizeProtocolInfo(proxy) {
+  const raw = String(proxy.type || proxy.protocol || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[-_]/g, "");
 
-function getProtocolDisplayName(fullName) {
-  if (!fullName) return "";
-  if (!protoShort) return fullName;
-  return PROTOCOL_SHORT_MAP[fullName] || fullName;
+  const protocolInfoMap = {
+    anytls:      { full: "AnyTLS",    short: "AT",   sort: "AnyTLS" },
+    hysteria2:   { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
+    hy2:         { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
+    tuic:        { full: "TUIC",      short: "TUIC", sort: "TUIC" },
+    hysteria:    { full: "Hysteria",  short: "HY",   sort: "Hysteria" },
+    vless:       { full: "VLESS",     short: "VL",   sort: "VLESS" },
+    trojan:      { full: "Trojan",    short: "TR",   sort: "Trojan" },
+    wireguard:   { full: "WireGuard", short: "WG",   sort: "WireGuard" },
+    wg:          { full: "WireGuard", short: "WG",   sort: "WireGuard" },
+    juicity:     { full: "Juicity",   short: "JC",   sort: "Juicity" },
+    naive:       { full: "Naive",     short: "NV",   sort: "Naive" },
+    vmess:       { full: "VMess",     short: "VM",   sort: "VMess" },
+    ss:          { full: "SS",        short: "SS",   sort: "SS" },
+    shadowsocks: { full: "SS",        short: "SS",   sort: "SS" },
+    ssr:         { full: "SSR",       short: "SSR",  sort: "SSR" },
+    shadowsocksr:{ full: "SSR",       short: "SSR",  sort: "SSR" },
+    socks5:      { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
+    socks:       { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
+    http:        { full: "HTTP",      short: "HT",   sort: "HTTP" },
+    https:       { full: "HTTPS",     short: "HS",   sort: "HTTPS" },
+    snell:       { full: "Snell",     short: "SN",   sort: "Snell" },
+    brook:       { full: "Brook",     short: "BK",   sort: "Brook" },
+    ssh:         { full: "SSH",       short: "SSH",  sort: "SSH" }
+  };
+
+  const hit = protocolInfoMap[raw];
+  if (hit) return hit;
+
+  const fallback = raw ? raw.toUpperCase() : "";
+  return {
+    full: fallback,
+    short: fallback,
+    sort: fallback
+  };
 }
 
 function getProtocolPriority(protoName) {
@@ -727,8 +712,7 @@ function operator(pro) {
         if (idx2 !== -1) usflag = FG[idx2] || "";
       }
 
-      const protoFull = getProtocolName(e);
-      const protoDisplay = getProtocolDisplayName(protoFull);
+      const protoInfo = normalizeProtocolInfo(e);
       const canonicalZh = getCanonicalZhByOutput(countryName);
       const pureTail = hasPurityMark(`${rawOriginalName} ${workingName}`) ? PURITY_MARK : "";
 
@@ -737,8 +721,8 @@ function operator(pro) {
       e._canonicalZh   = canonicalZh;
       e._multiplier    = ikey || "";
       e._multiplierNum = parseMultiplierNum(ikey || (default1x ? `1${XSTYLE}` : ""));
-      e._protoSort     = protoFull;
-      e._protoName     = proto ? protoDisplay : "";
+      e._protoSort     = protoInfo.sort;
+      e._protoName     = proto ? (protoShort ? protoInfo.short : protoInfo.full) : "";
       e._retainKey     = retainKey || "";
       e._tagKey        = ikeys || "";
       e._purityTail    = pureTail;

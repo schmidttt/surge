@@ -1,5 +1,5 @@
 /**
- * 更新日期：2026-05-22
+ * 更新日期：2026-05-22 22:16 v3
  * 用法：Sub-Store 脚本操作添加
  *
  * Sub-Store rename script
@@ -70,7 +70,8 @@
  *    out=quan 英文国家名，如：Japan / Hong Kong / United States
  *
  * 11) 是否清理信息节点
- *    clear=true   清理“套餐到期、剩余流量、官网地址、测试节点”等信息节点
+ *    clear=true   清理“套餐到期、剩余流量、官网地址”等信息节点
+ *                 但会保留带地区/协议/倍率等真实节点特征的官方测试节点
  *    clear=false  不清理
  *
  * 12) 是否给未识别地区的节点保留原名
@@ -275,8 +276,54 @@ const specialRegex = [
   /IPLC|IEPL|Kern|Edge|Pro|Std|Exp|Biz|Fam|Game|Buy|Zx|LB|Game/,
 ];
 
+// 信息节点清理：默认清理套餐、流量、到期、官网、联系方式等“非代理节点”。
+// 注意：不再简单地把所有“测试/test/官方”一刀切过滤；下面会对白名单测试节点做二次判断。
 const nameclear =
-  /(套餐|到期|有效|剩余|版本|已用|过期|失联|测试|官方|网址|备用|群|TEST|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|USE|USED|TOTAL|EXPIRE|EMAIL)/i;
+  /(套餐|到期|有效|剩余|版本|已用|过期|失联|网址|备用|群|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|USE|USED|TOTAL|EXPIRE|EMAIL)/i;
+
+// 机场常见“测试节点”写法：测试 / test / speedtest / trial / demo / 体验 / 试用 / 官方测试。
+// 只有同时具备地区、协议、倍率、编号等真实节点特征时，才从信息清理中豁免。
+const TEST_NODE_KEYWORD_RE = /(测试|測試|测速|測速|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方测试|官方測試|official\s*test)/i;
+const REAL_NODE_PROTOCOL_RE = /(AnyTLS|Hysteria2|Hysteria|HY2|TUIC|VLESS|Trojan|VMess|Shadowsocks|SS|SSR|WireGuard|Juicity|Naive|SOCKS5|HTTP|HTTPS|Reality|XTLS|TLS|WS|GRPC)/i;
+const REAL_NODE_RATE_RE = /(?:^|[\s_\-|])\d+(?:\.\d+)?\s*(?:x|X|×|倍)(?:$|[\s_\-|])/;
+const REAL_NODE_INDEX_RE = /(?:^|[\s_\-|])\d{1,3}(?:$|[\s_\-|])/;
+const REAL_NODE_WORD_RE = /(节点|節點|node|line|线路|線路|专线|專線|中转|中轉|隧道|tunnel|IPLC|IEPL|BGP)/i;
+
+function testRegexSafe(re, text) {
+  return new RegExp(re.source, re.flags.replace(/g/g, '')).test(text);
+}
+
+function hasKnownRegionSignal(name) {
+  const n = String(name || '');
+  if (FG.some(flag => n.includes(flag))) return true;
+  return REGION_NORMALIZE_RULES.some(([, re]) => testRegexSafe(re, n));
+}
+
+function isRealOfficialTestNode(name) {
+  const raw = String(name || '');
+  if (!TEST_NODE_KEYWORD_RE.test(raw)) return false;
+
+  const normalized = applyRegionNormalization(applyBasicReplacement(raw));
+  const hasRegion = hasKnownRegionSignal(normalized);
+  if (!hasRegion) return false;
+
+  return (
+    REAL_NODE_PROTOCOL_RE.test(normalized) ||
+    REAL_NODE_RATE_RE.test(normalized) ||
+    REAL_NODE_INDEX_RE.test(normalized) ||
+    REAL_NODE_WORD_RE.test(normalized) ||
+    /官方|official/i.test(normalized)
+  );
+}
+
+function shouldClearNodeByName(name) {
+  const n = String(name || '');
+  if (!nameclear.test(n) && !/(测试|測試|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方)/i.test(n)) {
+    return false;
+  }
+  if (isRealOfficialTestNode(n)) return false;
+  return nameclear.test(n) || /(测试|測試|测速|測速|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方)/i.test(n);
+}
 
 // prettier-ignore
 const regexArray=[/ˣ²/, /ˣ³/, /ˣ⁴/, /ˣ⁵/, /ˣ⁶/, /ˣ⁷/, /ˣ⁸/, /ˣ⁹/, /ˣ¹⁰/, /ˣ²⁰/, /ˣ³⁰/, /ˣ⁴⁰/, /ˣ⁵⁰/, /专线/, /(IPLC|I-P-L-C)/i, /(IEPL|I-E-P-L)/i, /核心/, /边缘/, /高级/, /标准/, /特殊/, /实验/, /商宽/, /家宽/, /家庭宽带/,/游戏|game/i, /购物/, /LB/, /cloudflare/i, /\budp\b/i, /\bgpt\b/i, /udpn\b/, ];
@@ -619,7 +666,7 @@ function operator(pro) {
     pro = pro.filter((res) => {
       const resname = res.name;
       const keep =
-        !(clear && nameclear.test(resname)) &&
+        !(clear && shouldClearNodeByName(resname)) &&
         !(nx && namenx.test(resname)) &&
         !(blnx && !nameblnx.test(resname)) &&
         !(key && !(keya.test(resname) && /2|4|6|7/i.test(resname)));

@@ -1,8 +1,8 @@
 /**
- * 更新日期：2026-06-29 16:05
+ * 更新日期：2026-06-29 16:23
  * 用法：Sub-Store 脚本操作添加
  *
- * 稳妥测试版：常用地区 + 冷门地区兼容
+ * 稳妥版：常用地区 + 冷门地区兼容
  *
  * 推荐参数：
  *   #flag=true&out=zh&proto=true&bl=true&show1x=true&default1x=true&xstyle=x
@@ -104,6 +104,19 @@ const REGION_PREFERENCE_ORDER = [
   "关岛",
   "北马里亚纳群岛",
   "英属印度洋领地",
+  "纽埃",
+  "帕劳",
+  "萨摩亚",
+  "美属萨摩亚",
+  "托克劳",
+  "图瓦卢",
+  "基里巴斯",
+  "瓦努阿图",
+  "诺福克岛",
+  "密克罗尼西亚",
+  "法属波利尼西亚",
+  "瓦利斯和富图纳",
+  "圣皮埃尔和密克隆",
   "瑞士",
   "瑞典",
   "挪威",
@@ -240,7 +253,21 @@ const EXTRA_REGIONS = [
   { zh: "几内亚比绍", en: "GW", quan: "Guinea-Bissau", flag: "🇬🇼", aliases: ["几内亚比绍", "幾內亞比紹", "Guinea Bissau", "Guinea-Bissau", "GW"] },
   { zh: "圣多美和普林西比", en: "ST", quan: "Sao Tome and Principe", flag: "🇸🇹", aliases: ["圣多美和普林西比", "聖多美和普林西比", "Sao Tome and Principe", "São Tomé and Príncipe", "Sao Tome", "ST"] },
   { zh: "北马里亚纳群岛", en: "MP", quan: "Northern Mariana Islands", flag: "🇲🇵", aliases: ["北马里亚纳群岛", "北馬里亞納群島", "Northern Mariana Islands", "Northern Mariana", "Saipan", "塞班", "MP"] },
-  { zh: "英属印度洋领地", en: "IO", quan: "British Indian Ocean Territory", flag: "🇮🇴", aliases: ["英属印度洋领地", "英屬印度洋領地", "British Indian Ocean Territory", "British Indian Ocean", "BIOT", "Diego Garcia", "迪戈加西亚", "迪戈加西亞", "IO"] }
+  { zh: "英属印度洋领地", en: "IO", quan: "British Indian Ocean Territory", flag: "🇮🇴", aliases: ["英属印度洋领地", "英屬印度洋領地", "British Indian Ocean Territory", "British Indian Ocean", "BIOT", "Diego Garcia", "迪戈加西亚", "迪戈加西亞", "IO"] },
+
+  { zh: "纽埃", en: "NU", quan: "Niue", flag: "🇳🇺", aliases: ["纽埃", "紐埃", "Niue", "NU"] },
+  { zh: "帕劳", en: "PW", quan: "Palau", flag: "🇵🇼", aliases: ["帕劳", "帛琉", "帕勞", "Palau", "PW"] },
+  { zh: "萨摩亚", en: "WS", quan: "Samoa", flag: "🇼🇸", aliases: ["萨摩亚", "薩摩亞", "Samoa", "Western Samoa", "WS"] },
+  { zh: "美属萨摩亚", en: "AS", quan: "American Samoa", flag: "🇦🇸", aliases: ["美属萨摩亚", "美屬薩摩亞", "American Samoa", "AS"] },
+  { zh: "托克劳", en: "TK", quan: "Tokelau", flag: "🇹🇰", aliases: ["托克劳", "托克勞", "Tokelau", "TK"] },
+  { zh: "图瓦卢", en: "TV", quan: "Tuvalu", flag: "🇹🇻", aliases: ["图瓦卢", "圖瓦盧", "Tuvalu", "TV"] },
+  { zh: "基里巴斯", en: "KI", quan: "Kiribati", flag: "🇰🇮", aliases: ["基里巴斯", "Kiribati", "KI"] },
+  { zh: "瓦努阿图", en: "VU", quan: "Vanuatu", flag: "🇻🇺", aliases: ["瓦努阿图", "瓦努阿圖", "Vanuatu", "VU"] },
+  { zh: "诺福克岛", en: "NF", quan: "Norfolk Island", flag: "🇳🇫", aliases: ["诺福克岛", "諾福克島", "Norfolk Island", "Norfolk", "NF"] },
+  { zh: "密克罗尼西亚", en: "FM", quan: "Micronesia", flag: "🇫🇲", aliases: ["密克罗尼西亚", "密克羅尼西亞", "密克罗尼西亚联邦", "密克羅尼西亞聯邦", "Micronesia", "Federated States of Micronesia", "FM"] },
+  { zh: "法属波利尼西亚", en: "PF", quan: "French Polynesia", flag: "🇵🇫", aliases: ["法属波利尼西亚", "法屬波利尼西亞", "French Polynesia", "Polynesia", "PF"] },
+  { zh: "瓦利斯和富图纳", en: "WF", quan: "Wallis and Futuna", flag: "🇼🇫", aliases: ["瓦利斯和富图纳", "瓦利斯和富圖納", "Wallis and Futuna", "Wallis", "Futuna", "WF"] },
+  { zh: "圣皮埃尔和密克隆", en: "PM", quan: "Saint Pierre and Miquelon", flag: "🇵🇲", aliases: ["圣皮埃尔和密克隆", "聖皮埃爾和密克隆", "Saint Pierre and Miquelon", "St Pierre and Miquelon", "PM"] }
 ];
 
 // ==================== 常用别名增强 ====================
@@ -275,7 +302,7 @@ const REGION_ALIAS_EXTRA = {
 
 // ==================== 其他规则 ====================
 const nameclear =
-  /(套餐|到期|有效|剩余|版本|已用|过期|失联|测试|官方|网址|备用|群|TEST|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|USE|USED|TOTAL|EXPIRE|EMAIL)/i;
+  /(套餐|到期|有效|剩余|版本|已用|过期|失联|测试|官方|网址|备用|群|TEST|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|拉取|拉取于|更新时间|更新于|刷新|刷新时间|USE|USED|TOTAL|EXPIRE|EMAIL|UPDATE|UPDATED|REFRESH)/i;
 
 const nameblnx = /(高倍|(?!1)2+(x|倍)|ˣ²|ˣ³|ˣ⁴|ˣ⁵|ˣ¹⁰)/i;
 const namenx   = /(高倍|(?!1)(0\.|\d)+(x|倍)|ˣ²|ˣ³|ˣ⁴|ˣ⁵|ˣ¹⁰)/i;
@@ -687,19 +714,19 @@ function operator(pro) {
       e._mobileTail    = mobileHit ? MOBILE_MARK : "";
     } else {
       if (unknown || nm) {
-        e._isUnknown     = true;
-        e._flagName      = "";
-        e._countryName   = UNKNOWN_NAME;
-        e._canonicalZh   = "__UNKNOWN__";
-        e._multiplier    = "";
-        e._multiplierNum = Number.POSITIVE_INFINITY;
-        e._protoSort     = "";
-        e._protoName     = "";
-        e._retainKey     = "";
-        e._tagKey        = "";
-        e._purityTail    = "";
-        e._starTail      = "";
-        e._mobileTail    = "";
+        e._isUnknown      = true;
+        e._flagName       = "";
+        e._countryName    = UNKNOWN_NAME;
+        e._canonicalZh    = "__UNKNOWN__";
+        e._multiplier     = "";
+        e._multiplierNum  = Number.POSITIVE_INFINITY;
+        e._protoSort      = "";
+        e._protoName      = "";
+        e._retainKey      = "";
+        e._tagKey         = "";
+        e._purityTail     = "";
+        e._starTail       = "";
+        e._mobileTail     = "";
         e._unknownRawName = rawName;
       } else {
         e.name = null;

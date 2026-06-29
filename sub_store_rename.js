@@ -1,11 +1,15 @@
 /**
- * 更新日期：2026-06-29 22:19
+ * 更新日期：2026-06-29 22:46
  * 用法：Sub-Store 脚本操作添加
  *
- * 多机场通用极速版：常用地区 + 冷门地区兼容
+ * 多机场通用极速版 v2：电脑 / 手机共用默认参数
  *
  * 推荐参数：
  *   #flag=true&out=zh&proto=true&bl=true&show1x=true&default1x=true&xstyle=x
+ *
+ * 可选参数：
+ *   ascii=true   默认开启英文别名兜底，但采用懒加载，不再启动时预编译全部英文正则
+ *   ascii=false 关闭英文长别名兜底，手机端极限提速用
  *
  * 典型输出：
  *   🇭🇰 香港 01 1x AT 净
@@ -13,13 +17,13 @@
  *   🇰🇷 韩国 01 10x AT 移
  *   ❓ 未识别 01 原节点名
  *
- * 优化策略：
- *   1. 不做完整特征预扫描，避免额外遍历
- *   2. 中文/非 ASCII 别名首字索引，命中即返回
- *   3. 国旗使用 Map 直查，不再全量扫描
+ * 本版优化：
+ *   1. 默认兼顾电脑 / 手机：保留英文兜底，但英文正则懒加载
+ *   2. 中文/非 ASCII 地区别名首字索引，命中即返回
+ *   3. 国旗使用 Map 直查，不全量扫描国旗表
  *   4. 尾部地区码仅在“包含 | 且末尾大写代码”时触发
  *   5. 普通大写地区码使用安全 Map，排除 SS / NF
- *   6. 英文长别名预编译，最后兜底
+ *   6. 地区识别增加缓存，相同原名不重复识别
  *   7. 净 / 星 / 移关键词预编译缓存
  */
 
@@ -50,6 +54,7 @@ const bl         = boolArg(inArg.bl, true),
       purity     = boolArg(inArg.purity, true),
       star       = boolArg(inArg.star, true),
       mobile     = boolArg(inArg.mobile, true),
+      ascii      = boolArg(inArg.ascii, true),
       nx         = boolArg(inArg.nx, false),
       blnx       = boolArg(inArg.blnx, false),
       key        = boolArg(inArg.key, false),
@@ -359,6 +364,7 @@ const CODE_REGION_MAP_ALL = {};
 const FLAG_REGION_MAP = {};
 const CJK_MATCHERS_BY_FIRST = {};
 const ASCII_MATCHERS = [];
+const REGION_MATCH_CACHE = {};
 
 const TAIL_CODE_RE = /\|\s*(?:(?:\d+(?:\.\d+)?)\s*(?:x|X|×|倍)\s*)?([A-Z]{2,3})\s*$/;
 const TOKEN_CODE_RE = /(^|[^A-Za-z0-9])([A-Z]{2,3})(?=[^A-Za-z0-9]|$)/g;
@@ -375,13 +381,21 @@ function addCjkMatcher(alias, region, score) {
 }
 
 function addAsciiMatcher(alias, region, score) {
-  const escaped = escapeReg(alias).replace(/\\ /g, "\\s*");
   ASCII_MATCHERS.push({
     alias: alias,
     region: region,
     score: score,
-    re: new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i")
+    re: null
   });
+}
+
+function buildAsciiRegex(item) {
+  if (item.re) return item.re;
+
+  const escaped = escapeReg(item.alias).replace(/\\ /g, "\\s*");
+  item.re = new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i");
+
+  return item.re;
 }
 
 function buildRegionDbAndMatchers() {
@@ -485,7 +499,7 @@ function buildRegionDbAndMatchers() {
   return db;
 }
 
-const REGION_DB = buildRegionDbAndMatchers();
+buildRegionDbAndMatchers();
 
 function matchCjkRegion(text) {
   const checkedFirst = {};
@@ -546,13 +560,17 @@ function matchTokenCodeRegion(text) {
 }
 
 function matchAsciiRegion(text) {
+  if (!ascii) return null;
+  if (!/[A-Za-z]/.test(text)) return null;
+
   for (let i = 0; i < ASCII_MATCHERS.length; i++) {
-    const m = ASCII_MATCHERS[i];
+    const item = ASCII_MATCHERS[i];
+    const re = buildAsciiRegex(item);
 
-    m.re.lastIndex = 0;
+    re.lastIndex = 0;
 
-    if (m.re.test(text)) {
-      return m.region;
+    if (re.test(text)) {
+      return item.region;
     }
   }
 
@@ -562,19 +580,18 @@ function matchAsciiRegion(text) {
 function matchRegion(name) {
   const text = String(name || "");
 
-  const cjk = matchCjkRegion(text);
-  if (cjk) return cjk;
+  if (REGION_MATCH_CACHE.hasOwnProperty(text)) {
+    return REGION_MATCH_CACHE[text] || null;
+  }
 
-  const flag = matchFlagRegion(text);
-  if (flag) return flag;
+  let result = matchCjkRegion(text);
+  if (!result) result = matchFlagRegion(text);
+  if (!result) result = matchTailCodeRegion(text);
+  if (!result) result = matchTokenCodeRegion(text);
+  if (!result) result = matchAsciiRegion(text);
 
-  const tail = matchTailCodeRegion(text);
-  if (tail) return tail;
-
-  const code = matchTokenCodeRegion(text);
-  if (code) return code;
-
-  return matchAsciiRegion(text);
+  REGION_MATCH_CACHE[text] = result || false;
+  return result;
 }
 
 // ==================== 净 / 星 / 移关键词缓存 ====================
@@ -613,9 +630,12 @@ function buildKeyMatchers(keysText) {
   return matchers;
 }
 
-function hasAnyKey(text, keysText) {
+const PURITY_MATCHERS = buildKeyMatchers(PURITY_KEYS);
+const STAR_MATCHERS = buildKeyMatchers(STAR_KEYS);
+const MOBILE_MATCHERS = buildKeyMatchers(MOBILE_KEYS);
+
+function hasAnyBuiltKey(text, matchers) {
   const source = String(text || "");
-  const matchers = buildKeyMatchers(keysText);
 
   for (let i = 0; i < matchers.length; i++) {
     const m = matchers[i];
@@ -785,9 +805,9 @@ function operator(pro) {
     const protoInfo = normalizeProtocolInfo(e);
     const region = matchRegion(rawName);
 
-    const starHit = star && hasAnyKey(tagSource, STAR_KEYS);
-    const mobileHit = mobile && hasAnyKey(tagSource, MOBILE_KEYS);
-    const purityHit = purity && hasAnyKey(tagSource, PURITY_KEYS) && !starHit && !mobileHit;
+    const starHit = star && hasAnyBuiltKey(tagSource, STAR_MATCHERS);
+    const mobileHit = mobile && hasAnyBuiltKey(tagSource, MOBILE_MATCHERS);
+    const purityHit = purity && hasAnyBuiltKey(tagSource, PURITY_MATCHERS) && !starHit && !mobileHit;
 
     if (region) {
       e._isUnknown     = false;

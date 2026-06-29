@@ -1,5 +1,5 @@
 /**
- * 更新日期：2026-06-29 16:23
+ * 更新日期：2026-06-29 17:06
  * 用法：Sub-Store 脚本操作添加
  *
  * 稳妥版：常用地区 + 冷门地区兼容
@@ -16,7 +16,7 @@
  * 核心策略：
  *   1. 常用国家、冷门国家、海外属地、特殊地区统一走 REGION_DB
  *   2. 地区别名长词优先，避免短词抢先误判
- *   3. 两字母地区码严格边界匹配
+ *   3. 两字母地区码严格边界匹配，并且大小写敏感
  *   4. 地区识别和尾标识别分离
  *   5. 默认保留未识别节点，便于后续补库
  */
@@ -75,6 +75,13 @@ const FGF          = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
       MOBILE_KEYS  = inArg.mobileKeys == undefined
         ? "5G网络+5G+Mobile+移动+蜂窝+LTE"
         : decodeURI(inArg.mobileKeys);
+
+// 这些地区码容易和协议/功能标签冲突，不作为“代码别名”强匹配。
+// 仍然可以通过中文名、英文名、国旗识别。
+const DISABLED_CODE_ALIASES = {
+  SS: true, // South Sudan，容易和 Shadowsocks 协议 SS 冲突
+  NF: true  // Norfolk Island，容易和 Netflix / NF 标签冲突
+};
 
 // ==================== 常用地区优先级 ====================
 const REGION_PREFERENCE_ORDER = [
@@ -221,53 +228,52 @@ const QC = ['Hong Kong','Macao','Taiwan','Japan','Korea','Singapore','United Sta
 
 // ==================== 冷门地区增强表 ====================
 const EXTRA_REGIONS = [
-  { zh: "中国大陆", en: "CN", quan: "China Mainland", flag: "🇨🇳", aliases: ["中国大陆", "中國大陸", "大陆", "大陸", "China Mainland", "Mainland China", "CN"] },
-  { zh: "巴勒斯坦", en: "PS", quan: "Palestine", flag: "🇵🇸", aliases: ["巴勒斯坦", "Palestine", "Palestinian", "PS"] },
-  { zh: "科索沃", en: "XK", quan: "Kosovo", flag: "🇽🇰", aliases: ["科索沃", "Kosovo", "XK"] },
-  { zh: "库克群岛", en: "CK", quan: "Cook Islands", flag: "🇨🇰", aliases: ["库克群岛", "庫克群島", "Cook Islands", "Cook", "CK"] },
-  { zh: "根西岛", en: "GG", quan: "Guernsey", flag: "🇬🇬", aliases: ["根西岛", "根西島", "Guernsey", "GG"] },
-  { zh: "泽西岛", en: "JE", quan: "Jersey", flag: "🇯🇪", aliases: ["泽西岛", "澤西島", "Jersey", "JE"] },
-  { zh: "瑙鲁", en: "NR", quan: "Nauru", flag: "🇳🇷", aliases: ["瑙鲁", "瑙魯", "Nauru", "NR"] },
-  { zh: "新喀里多尼亚", en: "NC", quan: "New Caledonia", flag: "🇳🇨", aliases: ["新喀里多尼亚", "新喀里多尼亞", "New Caledonia", "NC"] },
-  { zh: "巴哈马", en: "BS", quan: "Bahamas", flag: "🇧🇸", aliases: ["巴哈马", "巴哈馬", "Bahamas", "BS"] },
-  { zh: "格林纳达", en: "GD", quan: "Grenada", flag: "🇬🇩", aliases: ["格林纳达", "格林納達", "Grenada", "GD"] },
-  { zh: "阿鲁巴", en: "AW", quan: "Aruba", flag: "🇦🇼", aliases: ["阿鲁巴", "阿魯巴", "Aruba", "AW"] },
-  { zh: "法属圭亚那", en: "GF", quan: "French Guiana", flag: "🇬🇫", aliases: ["法属圭亚那", "法屬圭亞那", "French Guiana", "GF"] },
-  { zh: "蒙特塞拉特", en: "MS", quan: "Montserrat", flag: "🇲🇸", aliases: ["蒙特塞拉特", "Montserrat", "MS"] },
-  { zh: "荷属圣马丁", en: "SX", quan: "Sint Maarten", flag: "🇸🇽", aliases: ["荷属圣马丁", "荷屬聖馬丁", "Sint Maarten", "Saint Martin NL", "SX"] },
-  { zh: "荷属加勒比", en: "BQ", quan: "Caribbean Netherlands", flag: "🇧🇶", aliases: ["荷属加勒比", "荷屬加勒比", "Caribbean Netherlands", "Bonaire", "博奈尔", "博奈爾", "BQ"] },
-  { zh: "法属圣马丁", en: "MF", quan: "Saint Martin", flag: "🇲🇫", aliases: ["法属圣马丁", "法屬聖馬丁", "Saint Martin FR", "Saint-Martin", "MF"] },
-  { zh: "圣巴泰勒米", en: "BL", quan: "Saint Barthelemy", flag: "🇧🇱", aliases: ["圣巴泰勒米", "聖巴泰勒米", "Saint Barthelemy", "Saint Barth", "St Bart", "BL"] },
-  { zh: "瓜德罗普", en: "GP", quan: "Guadeloupe", flag: "🇬🇵", aliases: ["瓜德罗普", "瓜德羅普", "Guadeloupe", "GP"] },
-  { zh: "马提尼克", en: "MQ", quan: "Martinique", flag: "🇲🇶", aliases: ["马提尼克", "馬提尼克", "Martinique", "MQ"] },
-  { zh: "安提瓜和巴布达", en: "AG", quan: "Antigua and Barbuda", flag: "🇦🇬", aliases: ["安提瓜和巴布达", "安提瓜和巴布達", "Antigua and Barbuda", "Antigua", "AG"] },
-  { zh: "圣基茨和尼维斯", en: "KN", quan: "Saint Kitts and Nevis", flag: "🇰🇳", aliases: ["圣基茨和尼维斯", "聖基茨和尼維斯", "Saint Kitts and Nevis", "St Kitts", "Nevis", "KN"] },
-  { zh: "圣文森特和格林纳丁斯", en: "VC", quan: "Saint Vincent and the Grenadines", flag: "🇻🇨", aliases: ["圣文森特和格林纳丁斯", "聖文森特和格林納丁斯", "Saint Vincent and the Grenadines", "Saint Vincent", "VC"] },
-  { zh: "多米尼克", en: "DM", quan: "Dominica", flag: "🇩🇲", aliases: ["多米尼克", "Dominica", "DM"] },
-  { zh: "巴巴多斯", en: "BB", quan: "Barbados", flag: "🇧🇧", aliases: ["巴巴多斯", "Barbados", "BB"] },
-  { zh: "圣卢西亚", en: "LC", quan: "Saint Lucia", flag: "🇱🇨", aliases: ["圣卢西亚", "聖盧西亞", "Saint Lucia", "St Lucia", "LC"] },
-  { zh: "福克兰群岛", en: "FK", quan: "Falkland Islands", flag: "🇫🇰", aliases: ["福克兰群岛", "福克蘭群島", "Falkland Islands", "Falklands", "FK"] },
-  { zh: "特克斯和凯科斯群岛", en: "TC", quan: "Turks and Caicos Islands", flag: "🇹🇨", aliases: ["特克斯和凯科斯群岛", "特克斯和凱科斯群島", "Turks and Caicos Islands", "Turks Caicos", "TC"] },
-  { zh: "马约特", en: "YT", quan: "Mayotte", flag: "🇾🇹", aliases: ["马约特", "馬約特", "Mayotte", "YT"] },
-  { zh: "南苏丹", en: "SS", quan: "South Sudan", flag: "🇸🇸", aliases: ["南苏丹", "南蘇丹", "South Sudan", "SS"] },
-  { zh: "几内亚比绍", en: "GW", quan: "Guinea-Bissau", flag: "🇬🇼", aliases: ["几内亚比绍", "幾內亞比紹", "Guinea Bissau", "Guinea-Bissau", "GW"] },
-  { zh: "圣多美和普林西比", en: "ST", quan: "Sao Tome and Principe", flag: "🇸🇹", aliases: ["圣多美和普林西比", "聖多美和普林西比", "Sao Tome and Principe", "São Tomé and Príncipe", "Sao Tome", "ST"] },
-  { zh: "北马里亚纳群岛", en: "MP", quan: "Northern Mariana Islands", flag: "🇲🇵", aliases: ["北马里亚纳群岛", "北馬里亞納群島", "Northern Mariana Islands", "Northern Mariana", "Saipan", "塞班", "MP"] },
-  { zh: "英属印度洋领地", en: "IO", quan: "British Indian Ocean Territory", flag: "🇮🇴", aliases: ["英属印度洋领地", "英屬印度洋領地", "British Indian Ocean Territory", "British Indian Ocean", "BIOT", "Diego Garcia", "迪戈加西亚", "迪戈加西亞", "IO"] },
-
-  { zh: "纽埃", en: "NU", quan: "Niue", flag: "🇳🇺", aliases: ["纽埃", "紐埃", "Niue", "NU"] },
-  { zh: "帕劳", en: "PW", quan: "Palau", flag: "🇵🇼", aliases: ["帕劳", "帛琉", "帕勞", "Palau", "PW"] },
-  { zh: "萨摩亚", en: "WS", quan: "Samoa", flag: "🇼🇸", aliases: ["萨摩亚", "薩摩亞", "Samoa", "Western Samoa", "WS"] },
-  { zh: "美属萨摩亚", en: "AS", quan: "American Samoa", flag: "🇦🇸", aliases: ["美属萨摩亚", "美屬薩摩亞", "American Samoa", "AS"] },
-  { zh: "托克劳", en: "TK", quan: "Tokelau", flag: "🇹🇰", aliases: ["托克劳", "托克勞", "Tokelau", "TK"] },
-  { zh: "图瓦卢", en: "TV", quan: "Tuvalu", flag: "🇹🇻", aliases: ["图瓦卢", "圖瓦盧", "Tuvalu", "TV"] },
-  { zh: "基里巴斯", en: "KI", quan: "Kiribati", flag: "🇰🇮", aliases: ["基里巴斯", "Kiribati", "KI"] },
-  { zh: "瓦努阿图", en: "VU", quan: "Vanuatu", flag: "🇻🇺", aliases: ["瓦努阿图", "瓦努阿圖", "Vanuatu", "VU"] },
-  { zh: "诺福克岛", en: "NF", quan: "Norfolk Island", flag: "🇳🇫", aliases: ["诺福克岛", "諾福克島", "Norfolk Island", "Norfolk", "NF"] },
-  { zh: "密克罗尼西亚", en: "FM", quan: "Micronesia", flag: "🇫🇲", aliases: ["密克罗尼西亚", "密克羅尼西亞", "密克罗尼西亚联邦", "密克羅尼西亞聯邦", "Micronesia", "Federated States of Micronesia", "FM"] },
-  { zh: "法属波利尼西亚", en: "PF", quan: "French Polynesia", flag: "🇵🇫", aliases: ["法属波利尼西亚", "法屬波利尼西亞", "French Polynesia", "Polynesia", "PF"] },
-  { zh: "瓦利斯和富图纳", en: "WF", quan: "Wallis and Futuna", flag: "🇼🇫", aliases: ["瓦利斯和富图纳", "瓦利斯和富圖納", "Wallis and Futuna", "Wallis", "Futuna", "WF"] },
-  { zh: "圣皮埃尔和密克隆", en: "PM", quan: "Saint Pierre and Miquelon", flag: "🇵🇲", aliases: ["圣皮埃尔和密克隆", "聖皮埃爾和密克隆", "Saint Pierre and Miquelon", "St Pierre and Miquelon", "PM"] }
+  { zh: "中国大陆", en: "CN", quan: "China Mainland", aliases: ["中国大陆", "中國大陸", "大陆", "大陸", "China Mainland", "Mainland China", "CN"] },
+  { zh: "巴勒斯坦", en: "PS", quan: "Palestine", aliases: ["巴勒斯坦", "Palestine", "Palestinian", "PS"] },
+  { zh: "科索沃", en: "XK", quan: "Kosovo", aliases: ["科索沃", "Kosovo", "XK"] },
+  { zh: "库克群岛", en: "CK", quan: "Cook Islands", aliases: ["库克群岛", "庫克群島", "Cook Islands", "Cook", "CK"] },
+  { zh: "根西岛", en: "GG", quan: "Guernsey", aliases: ["根西岛", "根西島", "Guernsey", "GG"] },
+  { zh: "泽西岛", en: "JE", quan: "Jersey", aliases: ["泽西岛", "澤西島", "Jersey", "JE"] },
+  { zh: "瑙鲁", en: "NR", quan: "Nauru", aliases: ["瑙鲁", "瑙魯", "Nauru", "NR"] },
+  { zh: "新喀里多尼亚", en: "NC", quan: "New Caledonia", aliases: ["新喀里多尼亚", "新喀里多尼亞", "New Caledonia", "NC"] },
+  { zh: "巴哈马", en: "BS", quan: "Bahamas", aliases: ["巴哈马", "巴哈馬", "Bahamas", "BS"] },
+  { zh: "格林纳达", en: "GD", quan: "Grenada", aliases: ["格林纳达", "格林納達", "Grenada", "GD"] },
+  { zh: "阿鲁巴", en: "AW", quan: "Aruba", aliases: ["阿鲁巴", "阿魯巴", "Aruba", "AW"] },
+  { zh: "法属圭亚那", en: "GF", quan: "French Guiana", aliases: ["法属圭亚那", "法屬圭亞那", "French Guiana", "GF"] },
+  { zh: "蒙特塞拉特", en: "MS", quan: "Montserrat", aliases: ["蒙特塞拉特", "Montserrat", "MS"] },
+  { zh: "荷属圣马丁", en: "SX", quan: "Sint Maarten", aliases: ["荷属圣马丁", "荷屬聖馬丁", "Sint Maarten", "Saint Martin NL", "SX"] },
+  { zh: "荷属加勒比", en: "BQ", quan: "Caribbean Netherlands", aliases: ["荷属加勒比", "荷屬加勒比", "Caribbean Netherlands", "Bonaire", "博奈尔", "博奈爾", "BQ"] },
+  { zh: "法属圣马丁", en: "MF", quan: "Saint Martin", aliases: ["法属圣马丁", "法屬聖馬丁", "Saint Martin FR", "Saint-Martin", "MF"] },
+  { zh: "圣巴泰勒米", en: "BL", quan: "Saint Barthelemy", aliases: ["圣巴泰勒米", "聖巴泰勒米", "Saint Barthelemy", "Saint Barth", "St Bart", "BL"] },
+  { zh: "瓜德罗普", en: "GP", quan: "Guadeloupe", aliases: ["瓜德罗普", "瓜德羅普", "Guadeloupe", "GP"] },
+  { zh: "马提尼克", en: "MQ", quan: "Martinique", aliases: ["马提尼克", "馬提尼克", "Martinique", "MQ"] },
+  { zh: "安提瓜和巴布达", en: "AG", quan: "Antigua and Barbuda", aliases: ["安提瓜和巴布达", "安提瓜和巴布達", "Antigua and Barbuda", "Antigua", "AG"] },
+  { zh: "圣基茨和尼维斯", en: "KN", quan: "Saint Kitts and Nevis", aliases: ["圣基茨和尼维斯", "聖基茨和尼維斯", "Saint Kitts and Nevis", "St Kitts", "Nevis", "KN"] },
+  { zh: "圣文森特和格林纳丁斯", en: "VC", quan: "Saint Vincent and the Grenadines", aliases: ["圣文森特和格林纳丁斯", "聖文森特和格林納丁斯", "Saint Vincent and the Grenadines", "Saint Vincent", "VC"] },
+  { zh: "多米尼克", en: "DM", quan: "Dominica", aliases: ["多米尼克", "Dominica", "DM"] },
+  { zh: "巴巴多斯", en: "BB", quan: "Barbados", aliases: ["巴巴多斯", "Barbados", "BB"] },
+  { zh: "圣卢西亚", en: "LC", quan: "Saint Lucia", aliases: ["圣卢西亚", "聖盧西亞", "Saint Lucia", "St Lucia", "LC"] },
+  { zh: "福克兰群岛", en: "FK", quan: "Falkland Islands", aliases: ["福克兰群岛", "福克蘭群島", "Falkland Islands", "Falklands", "FK"] },
+  { zh: "特克斯和凯科斯群岛", en: "TC", quan: "Turks and Caicos Islands", aliases: ["特克斯和凯科斯群岛", "特克斯和凱科斯群島", "Turks and Caicos Islands", "Turks Caicos", "TC"] },
+  { zh: "马约特", en: "YT", quan: "Mayotte", aliases: ["马约特", "馬約特", "Mayotte", "YT"] },
+  { zh: "南苏丹", en: "SS", quan: "South Sudan", aliases: ["南苏丹", "南蘇丹", "South Sudan", "SS"] },
+  { zh: "几内亚比绍", en: "GW", quan: "Guinea-Bissau", aliases: ["几内亚比绍", "幾內亞比紹", "Guinea Bissau", "Guinea-Bissau", "GW"] },
+  { zh: "圣多美和普林西比", en: "ST", quan: "Sao Tome and Principe", aliases: ["圣多美和普林西比", "聖多美和普林西比", "Sao Tome and Principe", "São Tomé and Príncipe", "Sao Tome", "ST"] },
+  { zh: "北马里亚纳群岛", en: "MP", quan: "Northern Mariana Islands", aliases: ["北马里亚纳群岛", "北馬里亞納群島", "Northern Mariana Islands", "Northern Mariana", "Saipan", "塞班", "MP"] },
+  { zh: "英属印度洋领地", en: "IO", quan: "British Indian Ocean Territory", aliases: ["英属印度洋领地", "英屬印度洋領地", "British Indian Ocean Territory", "British Indian Ocean", "BIOT", "Diego Garcia", "迪戈加西亚", "迪戈加西亞", "IO"] },
+  { zh: "纽埃", en: "NU", quan: "Niue", aliases: ["纽埃", "紐埃", "Niue", "NU"] },
+  { zh: "帕劳", en: "PW", quan: "Palau", aliases: ["帕劳", "帛琉", "帕勞", "Palau", "PW"] },
+  { zh: "萨摩亚", en: "WS", quan: "Samoa", aliases: ["萨摩亚", "薩摩亞", "Samoa", "Western Samoa", "WS"] },
+  { zh: "美属萨摩亚", en: "AS", quan: "American Samoa", aliases: ["美属萨摩亚", "美屬薩摩亞", "American Samoa", "AS"] },
+  { zh: "托克劳", en: "TK", quan: "Tokelau", aliases: ["托克劳", "托克勞", "Tokelau", "TK"] },
+  { zh: "图瓦卢", en: "TV", quan: "Tuvalu", aliases: ["图瓦卢", "圖瓦盧", "Tuvalu", "TV"] },
+  { zh: "基里巴斯", en: "KI", quan: "Kiribati", aliases: ["基里巴斯", "Kiribati", "KI"] },
+  { zh: "瓦努阿图", en: "VU", quan: "Vanuatu", aliases: ["瓦努阿图", "瓦努阿圖", "Vanuatu", "VU"] },
+  { zh: "诺福克岛", en: "NF", quan: "Norfolk Island", aliases: ["诺福克岛", "諾福克島", "Norfolk Island", "Norfolk", "NF"] },
+  { zh: "密克罗尼西亚", en: "FM", quan: "Micronesia", aliases: ["密克罗尼西亚", "密克羅尼西亞", "密克罗尼西亚联邦", "密克羅尼西亞聯邦", "Micronesia", "Federated States of Micronesia", "FM"] },
+  { zh: "法属波利尼西亚", en: "PF", quan: "French Polynesia", aliases: ["法属波利尼西亚", "法屬波利尼西亞", "French Polynesia", "Polynesia", "PF"] },
+  { zh: "瓦利斯和富图纳", en: "WF", quan: "Wallis and Futuna", aliases: ["瓦利斯和富图纳", "瓦利斯和富圖納", "Wallis and Futuna", "Wallis", "Futuna", "WF"] },
+  { zh: "圣皮埃尔和密克隆", en: "PM", quan: "Saint Pierre and Miquelon", aliases: ["圣皮埃尔和密克隆", "聖皮埃爾和密克隆", "Saint Pierre and Miquelon", "St Pierre and Miquelon", "PM"] }
 ];
 
 // ==================== 常用别名增强 ====================
@@ -341,12 +347,34 @@ function uniq(arr) {
   return out;
 }
 
+function pad2(num) {
+  return num < 10 ? "0" + num : String(num);
+}
+
 function isAsciiLike(s) {
   return /^[A-Za-z0-9 _.\-]+$/.test(String(s || ""));
 }
 
 function isCodeLike(s) {
   return /^[A-Za-z]{2,3}$/.test(String(s || ""));
+}
+
+function isDisabledCodeAlias(s) {
+  const code = String(s || "").toUpperCase();
+  return !!DISABLED_CODE_ALIASES[code];
+}
+
+function flagFromCode(code) {
+  const c = String(code || "").toUpperCase();
+  if (!/^[A-Z]{2}$/.test(c)) return "";
+  return c.replace(/[A-Z]/g, function (char) {
+    return String.fromCodePoint(127397 + char.charCodeAt(0));
+  });
+}
+
+function regionFlag(region) {
+  if (region.flag) return region.flag;
+  return flagFromCode(region.en);
 }
 
 function matchAlias(text, alias) {
@@ -361,7 +389,8 @@ function matchAlias(text, alias) {
   const escaped = escapeReg(a).replace(/\\ /g, "\\s*");
 
   if (isCodeLike(a)) {
-    const reCode = new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i");
+    if (isDisabledCodeAlias(a)) return false;
+    const reCode = new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)");
     return reCode.test(source);
   }
 
@@ -391,7 +420,7 @@ function hasAnyKey(text, keysText) {
 function displayRegion(region) {
   if (outputMode === "en" || outputMode === "us") return region.en;
   if (outputMode === "quan") return region.quan;
-  if (outputMode === "gq" || outputMode === "flag") return region.flag;
+  if (outputMode === "gq" || outputMode === "flag") return regionFlag(region);
   return region.zh;
 }
 
@@ -468,8 +497,8 @@ function buildRegionDb() {
       zh: zh,
       en: EN[i],
       quan: QC[i],
-      flag: FG[i],
-      aliases: [zh, EN[i], QC[i], FG[i]]
+      flag: FG[i] || flagFromCode(EN[i]),
+      aliases: [zh, EN[i], QC[i], FG[i] || flagFromCode(EN[i])]
     };
   }
 
@@ -478,8 +507,8 @@ function buildRegionDb() {
       zh: r.zh,
       en: r.en,
       quan: r.quan,
-      flag: r.flag,
-      aliases: [r.zh, r.en, r.quan, r.flag].concat(r.aliases || [])
+      flag: r.flag || flagFromCode(r.en),
+      aliases: [r.zh, r.en, r.quan, r.flag || flagFromCode(r.en)].concat(r.aliases || [])
     };
   });
 
@@ -490,7 +519,10 @@ function buildRegionDb() {
 
   const db = Object.keys(map).map(function (zh) {
     const r = map[zh];
-    r.aliases = uniq(r.aliases);
+
+    r.aliases = uniq(r.aliases).filter(function (a) {
+      return !(isCodeLike(a) && isDisabledCodeAlias(a));
+    });
 
     r.aliases.sort(function (a, b) {
       const ac = isCodeLike(a) ? 1 : 0;
@@ -599,7 +631,7 @@ function sortAndSerial(pro) {
     });
 
     group.forEach(function (p, idx) {
-      const seq = String(idx + 1).padStart(2, "0");
+      const seq = pad2(idx + 1);
 
       if (p._isUnknown) {
         p.name = [
@@ -700,7 +732,7 @@ function operator(pro) {
 
     if (region) {
       e._isUnknown     = false;
-      e._flagName      = addflag ? region.flag : "";
+      e._flagName      = addflag ? regionFlag(region) : "";
       e._countryName   = displayRegion(region);
       e._canonicalZh   = region.zh;
       e._multiplier    = multiplier;

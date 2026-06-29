@@ -1,124 +1,30 @@
 /**
- * 更新日期：2026-05-22 22:16 v3
+ * 更新日期：2026-06-29 16:05
  * 用法：Sub-Store 脚本操作添加
  *
- * Sub-Store rename script
+ * 稳妥测试版：常用地区 + 冷门地区兼容
  *
- * =========================
- * 一、脚本效果
- * =========================
- * 最终输出格式：
- *   🇯🇵 日本 01 1x AT
- * 或带纯净标识：
- *   🇯🇵 日本 01 1x AT 净
- *
- * 排序规则：
- *   1. 先按地区聚合：同一地区节点排在一起
- *   2. 同地区内按倍率升序：1x -> 1.5x -> 2x -> 2.5x ...
- *   3. 同倍率内按协议优先级排序：同协议节点排在一起
- *   4. 同协议内按净字标识、保留标签、原始顺序稳定排序
- *   5. 每个地区内重新编号：01 / 02 / 03 ...
- *
- * 说明：
- *   本脚本在 Sub-Store 输出层完成重命名与排序。
- *   Surge 和 Shadowrocket 读取同一个 Sub-Store 输出订阅时，都会沿用这个节点顺序。
- *   因此无需在 Shadowrocket 配置文件里再做复杂节点排序。
- *
- * =========================
- * 二、常用参数说明
- * =========================
- * 1) 显示国家旗帜
- *    flag=true
- *
- * 2) 输出国家中文名
- *    out=zh
- *
- * 3) 是否显示协议
- *    proto=true   显示协议
- *    proto=false  不显示协议
- *
- * 4) 协议简称模式
- *    protoShort=true   默认开启，显示简称，例如：AT / HY2 / VL / TR / VM
- *    protoShort=false  显示完整协议名，例如：AnyTLS / Hysteria2 / VLESS / Trojan / VMess
- *
- * 5) 是否显示倍率
- *    bl=true      显示倍率
- *    bl=false     不显示倍率
- *
- * 6) 是否显示 1x
- *    show1x=true   显示 1x
- *    show1x=false  如果识别到倍率为 1，则不显示
- *
- * 7) 节点名里没写倍率时，是否自动补 1x
- *    default1x=true   自动补 1x
- *    default1x=false  不补
- *
- * 8) 倍率样式
- *    xstyle=x    输出 1x / 2.5x
- *    xstyle=×    输出 1× / 2.5×
- *
- * 9) 纯净线路尾标
- *    purity=true        默认开启纯净线路标识
- *    purity=false       关闭纯净线路标识
- *    purityMark=净      设置尾标字符，默认“净”
- *    purityKeys=纯净+原生+家宽+住宅+原生IP+解锁+NF
- *    说明：节点名命中 purityKeys 中任一关键词，就在末尾追加 purityMark
- *
- * 10) 国家识别输出格式
- *    out=zh   中文国家名，如：日本 / 香港 / 美国
- *    out=en   两字母国家码，如：JP / HK / US
- *    out=quan 英文国家名，如：Japan / Hong Kong / United States
- *
- * 11) 是否清理信息节点
- *    clear=true   清理“套餐到期、剩余流量、官网地址”等信息节点
- *                 但会保留带地区/协议/倍率等真实节点特征的官方测试节点
- *    clear=false  不清理
- *
- * 12) 是否给未识别地区的节点保留原名
- *    nm=true   保留原节点名
- *    nm=false  直接丢弃未识别地区节点
- *
- * 13) 分隔符
- *    fgf=%20   一般就是空格
- *
- * =========================
- * 三、推荐参数
- * =========================
- * 推荐直接使用：
- *   #flag=true&out=zh&proto=true&bl=true&show1x=true&default1x=true&xstyle=x&purityMark=净
+ * 推荐参数：
+ *   #flag=true&out=zh&proto=true&bl=true&show1x=true&default1x=true&xstyle=x
  *
  * 典型输出：
  *   🇭🇰 香港 01 1x AT 净
- *   🇭🇰 香港 02 1x TR
- *   🇯🇵 日本 01 2.5x VL 净
+ *   🇯🇵 日本 01 10x AT 星
+ *   🇰🇷 韩国 01 10x AT 移
+ *   ❓ 未识别 01 原节点名
  *
- * =========================
- * 四、地区优先级说明
- * =========================
- * 当前采用“国内常用度 + 一般速度体验”排序，不是纯地理距离。
- * 你如果想自己改地区顺序，只需要修改下面 REGION_PREFERENCE_ORDER 数组。
- *
- * =========================
- * 五、协议优先级说明
- * =========================
- * 当前采用“综合优劣 / 现代性 / 常见体验”排序。
- * 你如果想自己改协议顺序，只需要修改下面 PROTOCOL_PREFERENCE_ORDER 数组。
- *
- * =========================
- * 六、地区处理优化说明
- * =========================
- * 本版把地区归一化统一改成“只落到标准中文地区名”，避免混用：
- *   Russia Moscow / Korea Chuncheon / Hong Kong / United Kingdom London / Taiwan TW 台湾
- * 这类非标准键。
- * 现在统一归一到：
- *   香港 / 日本 / 新加坡 / 美国 / 韩国 / 台湾 / 英国 / 德国 / 法国 ...
- * 这样后续排序、分组、输出都更稳定。
+ * 核心策略：
+ *   1. 常用国家、冷门国家、海外属地、特殊地区统一走 REGION_DB
+ *   2. 地区别名长词优先，避免短词抢先误判
+ *   3. 两字母地区码严格边界匹配
+ *   4. 地区识别和尾标识别分离
+ *   5. 默认保留未识别节点，便于后续补库
  */
 
 const inArg = $arguments;
 
-// —— 布尔参数解析辅助 —— //
-function boolArg(v, d = false) {
+// ==================== 参数解析 ====================
+function boolArg(v, d) {
   if (v === undefined || v === null) return d;
   if (typeof v === "string") {
     const s = v.trim();
@@ -130,64 +36,74 @@ function boolArg(v, d = false) {
   return !!v;
 }
 
-const nx         = boolArg(inArg.nx, false),
-      bl         = boolArg(inArg.bl, true),
-      nf         = boolArg(inArg.nf, false),
-      key        = boolArg(inArg.key, false),
-      blgd       = boolArg(inArg.blgd, false),
-      blpx       = boolArg(inArg.blpx, false),
-      blnx       = boolArg(inArg.blnx, false),
-      debug      = boolArg(inArg.debug, false),
+const bl         = boolArg(inArg.bl, true),
       clear      = boolArg(inArg.clear, true),
       addflag    = boolArg(inArg.flag, false),
       nm         = boolArg(inArg.nm, false),
+      unknown    = boolArg(inArg.unknown, true),
       proto      = boolArg(inArg.proto, true),
       protoShort = boolArg(inArg.protoShort, true),
       show1x     = boolArg(inArg.show1x, true),
       default1x  = boolArg(inArg.default1x, true),
-      purity     = boolArg(inArg.purity, true);
+      purity     = boolArg(inArg.purity, true),
+      star       = boolArg(inArg.star, true),
+      mobile     = boolArg(inArg.mobile, true),
+      nx         = boolArg(inArg.nx, false),
+      blnx       = boolArg(inArg.blnx, false),
+      key        = boolArg(inArg.key, false),
+      blgd       = boolArg(inArg.blgd, false);
 
-// 严格边界匹配模式：en(默认，仅 EN 两字母) | all(全部识别词) | off(关闭)
-const ABSMODE = (inArg.abs || "en").toLowerCase();
+const FGF          = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
+      XSTYLE       = inArg.xstyle == undefined ? "x" : decodeURI(inArg.xstyle),
+      blockquic    = inArg.blockquic == undefined ? "" : decodeURI(inArg.blockquic),
+      outputMode   = (inArg.out || "zh").toLowerCase(),
+      BLKEY        = inArg.blkey == undefined ? "" : decodeURI(inArg.blkey),
+      UNKNOWN_NAME = inArg.unknownName == undefined ? "未识别" : decodeURI(inArg.unknownName),
+      UNKNOWN_FLAG = inArg.unknownFlag == undefined ? "❓" : decodeURI(inArg.unknownFlag),
 
-const FGF         = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
-      FNAME       = inArg.name == undefined ? "" : decodeURI(inArg.name),
-      BLKEY       = inArg.blkey == undefined ? "" : decodeURI(inArg.blkey),
-      blockquic   = inArg.blockquic == undefined ? "" : decodeURI(inArg.blockquic),
-      XSTYLE      = inArg.xstyle == undefined ? "x" : decodeURI(inArg.xstyle),
-      PURITY_MARK = inArg.purityMark == undefined ? "净" : decodeURI(inArg.purityMark),
-      PURITY_KEYS = inArg.purityKeys == undefined
-        ? "纯净+原生+家宽+住宅+原生IP+解锁+NF"
+      PURITY_MARK  = inArg.purityMark == undefined ? "净" : decodeURI(inArg.purityMark),
+      PURITY_KEYS  = inArg.purityKeys == undefined
+        ? "纯净+原生+原生IP+家宽+住宅+家庭宽带+Residential+HomeISP+Home ISP+Native+NativeIP+Clean+CleanIP+Clean IP"
         : decodeURI(inArg.purityKeys),
-      nameMap     = { cn: "cn", zh: "cn", us: "us", en: "us", quan: "quan", gq: "gq", flag: "gq" },
-      inname      = nameMap[inArg.in] || "",
-      outputName  = nameMap[inArg.out] || "";
 
-// ==================== 地区优先级（按国内常用度 + 一般速度体验） ====================
+      STAR_MARK    = inArg.starMark == undefined ? "星" : decodeURI(inArg.starMark),
+      STAR_KEYS    = inArg.starKeys == undefined
+        ? "星链+Starlink+Satellite+卫星"
+        : decodeURI(inArg.starKeys),
+
+      MOBILE_MARK  = inArg.mobileMark == undefined ? "移" : decodeURI(inArg.mobileMark),
+      MOBILE_KEYS  = inArg.mobileKeys == undefined
+        ? "5G网络+5G+Mobile+移动+蜂窝+LTE"
+        : decodeURI(inArg.mobileKeys);
+
+// ==================== 常用地区优先级 ====================
 const REGION_PREFERENCE_ORDER = [
   "香港",
   "日本",
   "新加坡",
+  "韩国",
   "台湾",
   "美国",
-  "韩国",
   "澳门",
-  "英国",
-  "马来",
+  "俄罗斯",
   "德国",
+  "英国",
   "法国",
   "荷兰",
   "加拿大",
   "澳大利亚",
   "新西兰",
-  "俄罗斯",
   "阿联酋",
   "土耳其",
   "印度",
   "泰国",
   "越南",
   "菲律宾",
+  "马来",
   "印尼",
+  "关岛",
+  "北马里亚纳群岛",
+  "英属印度洋领地",
   "瑞士",
   "瑞典",
   "挪威",
@@ -227,14 +143,33 @@ const REGION_PREFERENCE_ORDER = [
   "巴西",
   "阿根廷",
   "智利",
-  "秘鲁"
+  "秘鲁",
+  "巴勒斯坦",
+  "科索沃",
+  "库克群岛",
+  "法属圭亚那",
+  "荷属加勒比",
+  "法属圣马丁",
+  "荷属圣马丁",
+  "圣巴泰勒米",
+  "瓜德罗普",
+  "马提尼克",
+  "阿鲁巴",
+  "福克兰群岛",
+  "特克斯和凯科斯群岛",
+  "马约特",
+  "南苏丹",
+  "几内亚比绍",
+  "圣多美和普林西比",
+  "中国大陆"
 ];
 
-const REGION_PRIORITY_MAP = Object.fromEntries(
-  REGION_PREFERENCE_ORDER.map((name, idx) => [name, idx])
-);
+const REGION_PRIORITY_MAP = {};
+REGION_PREFERENCE_ORDER.forEach(function (name, idx) {
+  REGION_PRIORITY_MAP[name] = idx;
+});
 
-// ==================== 协议优先级（按综合优劣/现代性排序） ====================
+// ==================== 协议优先级 ====================
 const PROTOCOL_PREFERENCE_ORDER = [
   "AnyTLS",
   "Hysteria2",
@@ -256,11 +191,12 @@ const PROTOCOL_PREFERENCE_ORDER = [
   "SSH"
 ];
 
-const PROTOCOL_PRIORITY_MAP = Object.fromEntries(
-  PROTOCOL_PREFERENCE_ORDER.map((name, idx) => [name, idx])
-);
+const PROTOCOL_PRIORITY_MAP = {};
+PROTOCOL_PREFERENCE_ORDER.forEach(function (name, idx) {
+  PROTOCOL_PRIORITY_MAP[name] = idx;
+});
 
-// ==================== 数据表 ====================
+// ==================== 基础地区表 ====================
 // prettier-ignore
 const FG = ['🇭🇰','🇲🇴','🇹🇼','🇯🇵','🇰🇷','🇸🇬','🇺🇸','🇬🇧','🇫🇷','🇩🇪','🇦🇺','🇦🇪','🇦🇫','🇦🇱','🇩🇿','🇦🇴','🇦🇷','🇦🇲','🇦🇹','🇦🇿','🇧🇭','🇧🇩','🇧🇾','🇧🇪','🇧🇿','🇧🇯','🇧🇹','🇧🇴','🇧🇦','🇧🇼','🇧🇷','🇻🇬','🇧🇳','🇧🇬','🇧🇫','🇧🇮','🇰🇭','🇨🇲','🇨🇦','🇨🇻','🇰🇾','🇨🇫','🇹🇩','🇨🇱','🇨🇴','🇰🇲','🇨🇬','🇨🇩','🇨🇷','🇭🇷','🇨🇾','🇨🇿','🇩🇰','🇩🇯','🇩🇴','🇪🇨','🇪🇬','🇸🇻','🇬🇶','🇪🇷','🇪🇪','🇪🇹','🇫🇯','🇫🇮','🇬🇦','🇬🇲','🇬🇪','🇬🇭','🇬🇷','🇬🇱','🇬🇹','🇬🇳','🇬🇾','🇭🇹','🇭🇳','🇭🇺','🇮🇸','🇮🇳','🇮🇩','🇮🇷','🇮🇶','🇮🇪','🇮🇲','🇮🇱','🇮🇹','🇨🇮','🇯🇲','🇯🇴','🇰🇿','🇰🇪','🇰🇼','🇰🇬','🇱🇦','🇱🇻','🇱🇧','🇱🇸','🇱🇷','🇱🇾','🇱🇹','🇱🇺','🇲🇰','🇲🇬','🇲🇼','🇲🇾','🇲🇻','🇲🇱','🇲🇹','🇲🇷','🇲🇺','🇲🇽','🇲🇩','🇲🇨','🇲🇳','🇲🇪','🇲🇦','🇲🇿','🇲🇲','🇳🇦','🇳🇵','🇳🇱','🇳🇿','🇳🇮','🇳🇪','🇳🇬','🇰🇵','🇳🇴','🇴🇲','🇵🇰','🇵🇦','🇵🇾','🇵🇪','🇵🇭','🇵🇹','🇵🇷','🇶🇦','🇷🇴','🇷🇺','🇷🇼','🇸🇲','🇸🇦','🇸🇳','🇷🇸','🇸🇱','🇸🇰','🇸🇮','🇸🇴','🇿🇦','🇪🇸','🇱🇰','🇸🇩','🇸🇷','🇸🇿','🇸🇪','🇨🇭','🇸🇾','🇹🇯','🇹🇿','🇹🇭','🇹🇬','🇹🇴','🇹🇹','🇹🇳','🇹🇷','🇹🇲','🇻🇮','🇺🇬','🇺🇦','🇺🇾','🇺🇿','🇻🇪','🇻🇳','🇾🇪','🇿🇲','🇿🇼','🇦🇩','🇷🇪','🇵🇱','🇬🇺','🇻🇦','🇱🇮','🇨🇼','🇸🇨','🇦🇶','🇬🇮','🇨🇺','🇫🇴','🇦🇽','🇧🇲','🇹🇱'];
 // prettier-ignore
@@ -270,182 +206,174 @@ const ZH = ['香港','澳门','台湾','日本','韩国','新加坡','美国','�
 // prettier-ignore
 const QC = ['Hong Kong','Macao','Taiwan','Japan','Korea','Singapore','United States','United Kingdom','France','Germany','Australia','Dubai','Afghanistan','Albania','Algeria','Angola','Argentina','Armenia','Austria','Azerbaijan','Bahrain','Bangladesh','Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina','Botswana','Brazil','British Virgin Islands','Brunei','Bulgaria','Burkina-faso','Burundi','Cambodia','Cameroon','Canada','CapeVerde','CaymanIslands','Central African Republic','Chad','Chile','Colombia','Comoros','Congo-Brazzaville','Congo-Kinshasa','CostaRica','Croatia','Cyprus','Czech Republic','Denmark','Djibouti','Dominican Republic','Ecuador','Egypt','EISalvador','Equatorial Guinea','Eritrea','Estonia','Ethiopia','Fiji','Finland','Gabon','Gambia','Georgia','Ghana','Greece','Greenland','Guatemala','Guinea','Guyana','Haiti','Honduras','Hungary','Iceland','India','Indonesia','Iran','Iraq','Ireland','Isle of Man','Israel','Italy','Ivory Coast','Jamaica','Jordan','Kazakstan','Kenya','Kuwait','Kyrgyzstan','Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Lithuania','Luxembourg','Macedonia','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Mauritania','Mauritius','Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco','Mozambique','Myanmar(Burma)','Namibia','Nepal','Netherlands','New Zealand','Nicaragua','Niger','Nigeria','NorthKorea','Norway','Oman','Pakistan','Panama','Paraguay','Peru','Philippines','Portugal','PuertoRico','Qatar','Romania','Russia','Rwanda','SanMarino','SaudiArabia','Senegal','Serbia','SierraLeone','Slovakia','Slovenia','Somalia','SouthAfrica','Spain','SriLanka','Sudan','Suriname','Swaziland','Sweden','Switzerland','Syria','Tajikstan','Tanzania','Thailand','Togo','Tonga','TrinidadandTobago','Tunisia','Turkey','Turkmenistan','U.S.Virgin Islands','Uganda','Ukraine','Uruguay','Uzbekistan','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe','Andorra','Reunion','Poland','Guam','Vatican','Liechtensteins','Curacao','Seychelles','Antarctica','Gibraltar','Cuba','Faroe Islands','Ahvenanmaa','Bermuda','Timor-Leste'];
 
-const specialRegex = [
-  /(\d\.)?\d+×/,
-  /(\d\.)?\d+x/i,
-  /IPLC|IEPL|Kern|Edge|Pro|Std|Exp|Biz|Fam|Game|Buy|Zx|LB|Game/,
+// ==================== 冷门地区增强表 ====================
+const EXTRA_REGIONS = [
+  { zh: "中国大陆", en: "CN", quan: "China Mainland", flag: "🇨🇳", aliases: ["中国大陆", "中國大陸", "大陆", "大陸", "China Mainland", "Mainland China", "CN"] },
+  { zh: "巴勒斯坦", en: "PS", quan: "Palestine", flag: "🇵🇸", aliases: ["巴勒斯坦", "Palestine", "Palestinian", "PS"] },
+  { zh: "科索沃", en: "XK", quan: "Kosovo", flag: "🇽🇰", aliases: ["科索沃", "Kosovo", "XK"] },
+  { zh: "库克群岛", en: "CK", quan: "Cook Islands", flag: "🇨🇰", aliases: ["库克群岛", "庫克群島", "Cook Islands", "Cook", "CK"] },
+  { zh: "根西岛", en: "GG", quan: "Guernsey", flag: "🇬🇬", aliases: ["根西岛", "根西島", "Guernsey", "GG"] },
+  { zh: "泽西岛", en: "JE", quan: "Jersey", flag: "🇯🇪", aliases: ["泽西岛", "澤西島", "Jersey", "JE"] },
+  { zh: "瑙鲁", en: "NR", quan: "Nauru", flag: "🇳🇷", aliases: ["瑙鲁", "瑙魯", "Nauru", "NR"] },
+  { zh: "新喀里多尼亚", en: "NC", quan: "New Caledonia", flag: "🇳🇨", aliases: ["新喀里多尼亚", "新喀里多尼亞", "New Caledonia", "NC"] },
+  { zh: "巴哈马", en: "BS", quan: "Bahamas", flag: "🇧🇸", aliases: ["巴哈马", "巴哈馬", "Bahamas", "BS"] },
+  { zh: "格林纳达", en: "GD", quan: "Grenada", flag: "🇬🇩", aliases: ["格林纳达", "格林納達", "Grenada", "GD"] },
+  { zh: "阿鲁巴", en: "AW", quan: "Aruba", flag: "🇦🇼", aliases: ["阿鲁巴", "阿魯巴", "Aruba", "AW"] },
+  { zh: "法属圭亚那", en: "GF", quan: "French Guiana", flag: "🇬🇫", aliases: ["法属圭亚那", "法屬圭亞那", "French Guiana", "GF"] },
+  { zh: "蒙特塞拉特", en: "MS", quan: "Montserrat", flag: "🇲🇸", aliases: ["蒙特塞拉特", "Montserrat", "MS"] },
+  { zh: "荷属圣马丁", en: "SX", quan: "Sint Maarten", flag: "🇸🇽", aliases: ["荷属圣马丁", "荷屬聖馬丁", "Sint Maarten", "Saint Martin NL", "SX"] },
+  { zh: "荷属加勒比", en: "BQ", quan: "Caribbean Netherlands", flag: "🇧🇶", aliases: ["荷属加勒比", "荷屬加勒比", "Caribbean Netherlands", "Bonaire", "博奈尔", "博奈爾", "BQ"] },
+  { zh: "法属圣马丁", en: "MF", quan: "Saint Martin", flag: "🇲🇫", aliases: ["法属圣马丁", "法屬聖馬丁", "Saint Martin FR", "Saint-Martin", "MF"] },
+  { zh: "圣巴泰勒米", en: "BL", quan: "Saint Barthelemy", flag: "🇧🇱", aliases: ["圣巴泰勒米", "聖巴泰勒米", "Saint Barthelemy", "Saint Barth", "St Bart", "BL"] },
+  { zh: "瓜德罗普", en: "GP", quan: "Guadeloupe", flag: "🇬🇵", aliases: ["瓜德罗普", "瓜德羅普", "Guadeloupe", "GP"] },
+  { zh: "马提尼克", en: "MQ", quan: "Martinique", flag: "🇲🇶", aliases: ["马提尼克", "馬提尼克", "Martinique", "MQ"] },
+  { zh: "安提瓜和巴布达", en: "AG", quan: "Antigua and Barbuda", flag: "🇦🇬", aliases: ["安提瓜和巴布达", "安提瓜和巴布達", "Antigua and Barbuda", "Antigua", "AG"] },
+  { zh: "圣基茨和尼维斯", en: "KN", quan: "Saint Kitts and Nevis", flag: "🇰🇳", aliases: ["圣基茨和尼维斯", "聖基茨和尼維斯", "Saint Kitts and Nevis", "St Kitts", "Nevis", "KN"] },
+  { zh: "圣文森特和格林纳丁斯", en: "VC", quan: "Saint Vincent and the Grenadines", flag: "🇻🇨", aliases: ["圣文森特和格林纳丁斯", "聖文森特和格林納丁斯", "Saint Vincent and the Grenadines", "Saint Vincent", "VC"] },
+  { zh: "多米尼克", en: "DM", quan: "Dominica", flag: "🇩🇲", aliases: ["多米尼克", "Dominica", "DM"] },
+  { zh: "巴巴多斯", en: "BB", quan: "Barbados", flag: "🇧🇧", aliases: ["巴巴多斯", "Barbados", "BB"] },
+  { zh: "圣卢西亚", en: "LC", quan: "Saint Lucia", flag: "🇱🇨", aliases: ["圣卢西亚", "聖盧西亞", "Saint Lucia", "St Lucia", "LC"] },
+  { zh: "福克兰群岛", en: "FK", quan: "Falkland Islands", flag: "🇫🇰", aliases: ["福克兰群岛", "福克蘭群島", "Falkland Islands", "Falklands", "FK"] },
+  { zh: "特克斯和凯科斯群岛", en: "TC", quan: "Turks and Caicos Islands", flag: "🇹🇨", aliases: ["特克斯和凯科斯群岛", "特克斯和凱科斯群島", "Turks and Caicos Islands", "Turks Caicos", "TC"] },
+  { zh: "马约特", en: "YT", quan: "Mayotte", flag: "🇾🇹", aliases: ["马约特", "馬約特", "Mayotte", "YT"] },
+  { zh: "南苏丹", en: "SS", quan: "South Sudan", flag: "🇸🇸", aliases: ["南苏丹", "南蘇丹", "South Sudan", "SS"] },
+  { zh: "几内亚比绍", en: "GW", quan: "Guinea-Bissau", flag: "🇬🇼", aliases: ["几内亚比绍", "幾內亞比紹", "Guinea Bissau", "Guinea-Bissau", "GW"] },
+  { zh: "圣多美和普林西比", en: "ST", quan: "Sao Tome and Principe", flag: "🇸🇹", aliases: ["圣多美和普林西比", "聖多美和普林西比", "Sao Tome and Principe", "São Tomé and Príncipe", "Sao Tome", "ST"] },
+  { zh: "北马里亚纳群岛", en: "MP", quan: "Northern Mariana Islands", flag: "🇲🇵", aliases: ["北马里亚纳群岛", "北馬里亞納群島", "Northern Mariana Islands", "Northern Mariana", "Saipan", "塞班", "MP"] },
+  { zh: "英属印度洋领地", en: "IO", quan: "British Indian Ocean Territory", flag: "🇮🇴", aliases: ["英属印度洋领地", "英屬印度洋領地", "British Indian Ocean Territory", "British Indian Ocean", "BIOT", "Diego Garcia", "迪戈加西亚", "迪戈加西亞", "IO"] }
 ];
 
-// 信息节点清理：默认清理套餐、流量、到期、官网、联系方式等“非代理节点”。
-// 注意：不再简单地把所有“测试/test/官方”一刀切过滤；下面会对白名单测试节点做二次判断。
+// ==================== 常用别名增强 ====================
+const REGION_ALIAS_EXTRA = {
+  "香港": ["香港", "港岛", "港島", "九龙", "九龍", "新界", "Hong Kong", "HongKong", "HKG", "深港", "沪港", "京港", "广港", "杭港", "呼港"],
+  "澳门": ["澳门", "澳門", "Macao", "Macau", "MFM"],
+  "台湾": ["台湾", "台灣", "台北", "新北", "高雄", "台中", "桃园", "桃園", "Taiwan", "Taipei", "TPE", "TW"],
+  "日本": ["日本", "东京", "東京", "大阪", "大坂", "名古屋", "埼玉", "横滨", "橫濱", "Japan", "Tokyo", "Osaka", "Nagoya", "NRT", "HND", "KIX", "JP"],
+  "韩国": ["韩国", "韓國", "首尔", "首爾", "春川", "Korea", "South Korea", "Seoul", "Chuncheon", "ICN", "KR"],
+  "新加坡": ["新加坡", "狮城", "獅城", "Singapore", "SIN", "SG"],
+  "美国": ["美国", "美國", "洛杉矶", "洛杉磯", "硅谷", "纽约", "紐約", "俄勒冈", "俄勒岡", "United States", "USA", "America", "Los Angeles", "San Jose", "Silicon Valley", "Portland", "Chicago", "Columbus", "New York", "Seattle", "US"],
+  "英国": ["英国", "英國", "伦敦", "倫敦", "United Kingdom", "Britain", "England", "London", "UK", "GB"],
+  "德国": ["德国", "德國", "法兰克福", "法蘭克福", "Germany", "Frankfurt", "DE"],
+  "法国": ["法国", "法國", "巴黎", "France", "Paris", "FR"],
+  "荷兰": ["荷兰", "荷蘭", "阿姆斯特丹", "Netherlands", "Amsterdam", "NL"],
+  "加拿大": ["加拿大", "多伦多", "多倫多", "温哥华", "溫哥華", "Canada", "Toronto", "Vancouver", "CA"],
+  "澳大利亚": ["澳大利亚", "澳大利亞", "澳洲", "悉尼", "雪梨", "墨尔本", "墨爾本", "Australia", "Sydney", "Melbourne", "AU"],
+  "马来": ["马来西亚", "馬來西亞", "马来", "馬來", "吉隆坡", "Malaysia", "Kuala Lumpur", "MY"],
+  "印尼": ["印尼", "印度尼西亚", "印度尼西亞", "雅加达", "雅加達", "Indonesia", "Jakarta", "ID"],
+  "俄罗斯": ["俄罗斯", "俄羅斯", "莫斯科", "Russia", "Moscow", "RU"],
+  "泰国": ["泰国", "泰國", "曼谷", "Thailand", "Bangkok", "TH"],
+  "越南": ["越南", "胡志明", "河内", "河內", "Vietnam", "Ho Chi Minh", "Hanoi", "VN"],
+  "菲律宾": ["菲律宾", "菲律賓", "马尼拉", "馬尼拉", "Philippines", "Manila", "PH"],
+  "黑山共和国": ["黑山共和国", "黑山共和國", "黑山", "Montenegro", "ME"],
+  "百慕达": ["百慕达", "百慕大", "Bermuda", "BM"],
+  "孟加拉国": ["孟加拉国", "孟加拉國", "孟加拉", "Bangladesh", "Dhaka", "BD"],
+  "刚果(布)": ["刚果布", "剛果布", "刚果(布)", "刚果（布）", "Congo Brazzaville", "Congo-Brazzaville", "CG"],
+  "刚果(金)": ["刚果金", "剛果金", "刚果(金)", "刚果（金）", "Congo Kinshasa", "Congo-Kinshasa", "CD"],
+  "多米尼加共和国": ["多米尼加共和国", "多米尼加共和國", "Dominican Republic", "DO"],
+  "南极": ["南极", "南極", "南极洲", "南極洲", "Antarctica", "AQ"]
+};
+
+// ==================== 其他规则 ====================
 const nameclear =
-  /(套餐|到期|有效|剩余|版本|已用|过期|失联|网址|备用|群|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|USE|USED|TOTAL|EXPIRE|EMAIL)/i;
-
-// 机场常见“测试节点”写法：测试 / test / speedtest / trial / demo / 体验 / 试用 / 官方测试。
-// 只有同时具备地区、协议、倍率、编号等真实节点特征时，才从信息清理中豁免。
-const TEST_NODE_KEYWORD_RE = /(测试|測試|测速|測速|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方测试|官方測試|official\s*test)/i;
-const REAL_NODE_PROTOCOL_RE = /(AnyTLS|Hysteria2|Hysteria|HY2|TUIC|VLESS|Trojan|VMess|Shadowsocks|SS|SSR|WireGuard|Juicity|Naive|SOCKS5|HTTP|HTTPS|Reality|XTLS|TLS|WS|GRPC)/i;
-const REAL_NODE_RATE_RE = /(?:^|[\s_\-|])\d+(?:\.\d+)?\s*(?:x|X|×|倍)(?:$|[\s_\-|])/;
-const REAL_NODE_INDEX_RE = /(?:^|[\s_\-|])\d{1,3}(?:$|[\s_\-|])/;
-const REAL_NODE_WORD_RE = /(节点|節點|node|line|线路|線路|专线|專線|中转|中轉|隧道|tunnel|IPLC|IEPL|BGP)/i;
-
-function testRegexSafe(re, text) {
-  return new RegExp(re.source, re.flags.replace(/g/g, '')).test(text);
-}
-
-function hasKnownRegionSignal(name) {
-  const n = String(name || '');
-  if (FG.some(flag => n.includes(flag))) return true;
-  return REGION_NORMALIZE_RULES.some(([, re]) => testRegexSafe(re, n));
-}
-
-function isRealOfficialTestNode(name) {
-  const raw = String(name || '');
-  if (!TEST_NODE_KEYWORD_RE.test(raw)) return false;
-
-  const normalized = applyRegionNormalization(applyBasicReplacement(raw));
-  const hasRegion = hasKnownRegionSignal(normalized);
-  if (!hasRegion) return false;
-
-  return (
-    REAL_NODE_PROTOCOL_RE.test(normalized) ||
-    REAL_NODE_RATE_RE.test(normalized) ||
-    REAL_NODE_INDEX_RE.test(normalized) ||
-    REAL_NODE_WORD_RE.test(normalized) ||
-    /官方|official/i.test(normalized)
-  );
-}
-
-function shouldClearNodeByName(name) {
-  const n = String(name || '');
-  if (!nameclear.test(n) && !/(测试|測試|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方)/i.test(n)) {
-    return false;
-  }
-  if (isRealOfficialTestNode(n)) return false;
-  return nameclear.test(n) || /(测试|測試|测速|測速|\btest\b|speedtest|trial|demo|体验|體驗|试用|試用|官方)/i.test(n);
-}
-
-// prettier-ignore
-const regexArray=[/ˣ²/, /ˣ³/, /ˣ⁴/, /ˣ⁵/, /ˣ⁶/, /ˣ⁷/, /ˣ⁸/, /ˣ⁹/, /ˣ¹⁰/, /ˣ²⁰/, /ˣ³⁰/, /ˣ⁴⁰/, /ˣ⁵⁰/, /专线/, /(IPLC|I-P-L-C)/i, /(IEPL|I-E-P-L)/i, /核心/, /边缘/, /高级/, /标准/, /特殊/, /实验/, /商宽/, /家宽/, /家庭宽带/,/游戏|game/i, /购物/, /LB/, /cloudflare/i, /\budp\b/i, /\bgpt\b/i, /udpn\b/, ];
-// prettier-ignore
-const valueArray= [ "2×","3×","4×","5×","6×","7×","8×","9×","10×","20×","30×","40×","50×","DL","IPLC","IEPL","Kern","Edge","Pro","Std","Spec","Exp","Biz","Fam","Game","Buy","LB","CF","UDP","GPT","UDPN"];
+  /(套餐|到期|有效|剩余|版本|已用|过期|失联|测试|官方|网址|备用|群|TEST|客服|网站|获取|订阅|流量|机场|下次|官址|联系|邮箱|工单|学术|USE|USED|TOTAL|EXPIRE|EMAIL)/i;
 
 const nameblnx = /(高倍|(?!1)2+(x|倍)|ˣ²|ˣ³|ˣ⁴|ˣ⁵|ˣ¹⁰)/i;
 const namenx   = /(高倍|(?!1)(0\.|\d)+(x|倍)|ˣ²|ˣ³|ˣ⁴|ˣ⁵|ˣ¹⁰)/i;
 
-const keya = /港|Hong|HK|新加坡|SG|Singapore|日本|Japan|JP|美国|United States|US|韩|土耳其|TR|Turkey|Korea|KR/i;
-const keyb = /(((1|2|3|4)\d)|(香港|Hong|HK) 0[5-9]|((新加坡|SG|Singapore|日本|Japan|JP|美国|United States|US|韩|土耳其|TR|Turkey|Korea|KR) 0[3-9]))/i;
+const regexArray = [
+  /ˣ²/, /ˣ³/, /ˣ⁴/, /ˣ⁵/, /ˣ⁶/, /ˣ⁷/, /ˣ⁸/, /ˣ⁹/, /ˣ¹⁰/,
+  /专线/, /(IPLC|I-P-L-C)/i, /(IEPL|I-E-P-L)/i, /核心/, /边缘/,
+  /高级/, /标准/, /特殊/, /实验/, /商宽/, /游戏|game/i,
+  /购物/, /LB/, /cloudflare/i, /\budp\b/i, /\bgpt\b/i
+];
 
-// ==================== 非地区类预处理 ====================
-const BASIC_REPLACE_RULES = {
-  GB: /UK/g,
-  "B-G-P": /BGP/g,
-  "I-E-P-L": /IEPL/gi,
-  "I-P-L-C": /IPLC/gi,
-  家宽: /家庭宽带|家庭|住宅/g,
-  G: /\d\s?GB/gi,
-  Esnc: /esnc/gi,
-};
-
-// ==================== 地区归一化规则（只归一到标准中文地区名） ====================
-const REGION_NORMALIZE_RULES = [
-  ["香港", /(深|沪|呼|京|广|杭)港|Hong\s?Kong|Hongkong|香港|港岛|九龙|新界|HKG/gi],
-  ["澳门", /Macao|Macau|澳门/gi],
-  ["台湾", /Taipei|Taiwan|台湾|台北|新北|高雄|台中|桃园|桃園|TW(?![A-Za-z])/gi],
-  ["日本", /Tokyo|Osaka|Nagoya|Japan|日本|东京|大阪|大坂|名古屋|埼玉|横滨|橫濱/gi],
-  ["韩国", /Seoul|Chuncheon|Korea|韩国|首尔|首爾|春川/gi],
-  ["新加坡", /Singapore|新加坡|狮城|獅城|SIN/gi],
-  ["美国", /United\s*States|USA|America|美国|洛杉矶|洛杉磯|Los\s*Angeles|San\s*Jose|Silicon\s*Valley|Portland|Chicago|Columbus|New\s*York|Seattle|俄勒冈|俄勒岡|硅谷|紐約|纽约/gi],
-  ["英国", /United\s*Kingdom|Britain|England|英国|伦敦|倫敦|London/gi],
-  ["德国", /Germany|德国|德國|Frankfurt|法兰克福|法蘭克福/gi],
-  ["法国", /France|法国|法國|Paris|巴黎/gi],
-  ["荷兰", /Netherlands|荷兰|荷蘭|Amsterdam|阿姆斯特丹/gi],
-  ["加拿大", /Canada|加拿大|Toronto|Vancouver|多伦多|溫哥華|温哥华/gi],
-  ["澳大利亚", /Australia|澳大利亚|澳洲|悉尼|雪梨|Sydney|Melbourne|墨尔本|墨爾本/gi],
-  ["俄罗斯", /Russia|俄罗斯|俄羅斯|Moscow|莫斯科/gi],
-  ["土耳其", /Turkey|土耳其|Istanbul|伊斯坦布尔|伊斯坦堡/gi],
-  ["泰国", /Thailand|泰国|泰國|Bangkok|曼谷/gi],
-  ["越南", /Vietnam|越南|胡志明|河内|河內|Ho\s*Chi\s*Minh|Hanoi/gi],
-  ["菲律宾", /Philippines|菲律宾|菲律賓|Manila|马尼拉/gi],
-  ["马来", /Malaysia|马来西亚|馬來西亞|吉隆坡|Kuala\s*Lumpur/gi],
-  ["印尼", /Indonesia|印尼|印度尼西亚|印度尼西亞|Jakarta|雅加达|雅加達/gi],
-  ["印度", /India|印度|Mumbai|孟买|孟買|Delhi|德里/gi],
-  ["阿联酋", /(🇦🇪|阿联酋|阿聯酋|迪拜|Dubai|UAE|United\s*Arab\s*Emirates)/gi],
-  ["沙特阿拉伯", /(🇸🇦|沙特|沙特阿拉伯|Saudi\s*Arabia|KSA|\bSTC\b)/gi],
-  ["卡塔尔", /Qatar|卡塔尔|卡達爾|Doha|多哈/gi],
-  ["阿曼", /Oman|阿曼|Muscat|马斯喀特/gi],
-  ["巴林", /Bahrain|巴林/gi],
-  ["科威特", /Kuwait|科威特/gi],
-  ["伊朗", /Iran|伊朗|Tehran|德黑兰|德黑蘭/gi],
-  ["伊拉克", /Iraq|伊拉克|Baghdad|巴格达|巴格達/gi],
-  ["哈萨克斯坦", /Kazakhstan|哈萨克斯坦|阿拉木图|阿拉木圖|Almaty/gi],
-  ["乌克兰", /Ukraine|乌克兰|基辅|基輔|Kyiv|Kiev/gi],
-  ["瑞士", /Switzerland|瑞士|Zurich|苏黎世|蘇黎世|Geneva|日内瓦|日內瓦/gi],
-  ["瑞典", /Sweden|瑞典|Stockholm|斯德哥尔摩|斯德哥爾摩/gi],
-  ["挪威", /Norway|挪威|Oslo|奥斯陆|奧斯陸/gi],
-  ["丹麦", /Denmark|丹麦|丹麥|Copenhagen|哥本哈根/gi],
-  ["芬兰", /Finland|芬兰|芬蘭|Helsinki|赫尔辛基|赫爾辛基/gi],
-  ["比利时", /Belgium|比利时|比利時|Brussels|布鲁塞尔|布魯塞爾/gi],
-  ["意大利", /Italy|意大利|罗马|羅馬|Rome|Milan|米兰|米蘭/gi],
-  ["西班牙", /Spain|西班牙|Madrid|马德里|馬德里|Barcelona|巴塞罗那|巴塞羅那/gi],
-  ["葡萄牙", /Portugal|葡萄牙|Lisbon|里斯本/gi],
-  ["波兰", /Poland|波兰|波蘭|Warsaw|华沙|華沙/gi],
-  ["捷克", /Czech|捷克|Prague|布拉格/gi],
-  ["奥地利", /Austria|奥地利|奧地利|Vienna|维也纳|維也納/gi],
-  ["匈牙利", /Hungary|匈牙利|Budapest|布达佩斯|布達佩斯/gi],
-  ["罗马尼亚", /Romania|罗马尼亚|羅馬尼亞|Bucharest|布加勒斯特/gi],
-  ["白俄罗斯", /Belarus|白俄罗斯|白俄羅斯|Minsk|明斯克/gi],
-  ["蒙古", /Mongolia|蒙古|Ulaanbaatar|乌兰巴托|烏蘭巴托/gi],
-  ["朝鲜", /North\s*Korea|朝鲜|朝鮮|Pyongyang|平壤/gi],
-  ["老挝", /Laos|老挝|寮國|Vientiane|万象|萬象/gi],
-  ["柬埔寨", /Cambodia|柬埔寨|金边|金邊|Phnom\s*Penh/gi],
-  ["缅甸", /Myanmar|Burma|缅甸|緬甸|Yangon|仰光/gi],
-  ["尼泊尔", /Nepal|尼泊尔|尼泊爾|Kathmandu|加德满都|加德滿都/gi],
-  ["不丹", /Bhutan|不丹/gi],
-  ["孟加拉国", /Bangladesh|孟加拉国|孟加拉國|Dhaka|达卡|達卡/gi],
-  ["斯里兰卡", /Sri\s*Lanka|斯里兰卡|斯里蘭卡|Colombo|科伦坡|科倫坡/gi],
-  ["南非", /South\s*Africa|南非|Johannesburg|约翰内斯堡|約翰內斯堡|Cape\s*Town|开普敦|開普敦/gi],
-  ["墨西哥", /Mexico|墨西哥|Mexico\s*City|墨西哥城/gi],
-  ["巴西", /Brazil|巴西|Sao\s*Paulo|São\s*Paulo|圣保罗|聖保羅|Rio/gi],
-  ["阿根廷", /Argentina|阿根廷|Buenos\s*Aires|布宜诺斯艾利斯|布宜諾斯艾利斯/gi],
-  ["智利", /Chile|智利|Santiago|圣地亚哥|聖地亞哥/gi],
-  ["秘鲁", /Peru|秘鲁|秘魯|Lima|利马|利馬/gi]
+const valueArray = [
+  "2×", "3×", "4×", "5×", "6×", "7×", "8×", "9×", "10×",
+  "DL", "IPLC", "IEPL", "Kern", "Edge",
+  "Pro", "Std", "Spec", "Exp", "Biz", "Game",
+  "Buy", "LB", "CF", "UDP", "GPT"
 ];
 
 // ==================== 工具函数 ====================
-let GetK = false, AMK = [];
-
-function ObjKA(i) {
-  GetK = true;
-  AMK = Object.entries(i).filter(([k]) => k && k.trim() !== "");
-}
-
-const EN_SET = new Set(EN);
-
 function escapeReg(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isAsciiWord(s) {
-  return /^[A-Za-z0-9]+$/.test(s);
-}
-
-function matchWithBoundary(name, key) {
-  if (ABSMODE === "off") return name.includes(key);
-
-  if (ABSMODE === "en") {
-    if (EN_SET.has(key)) {
-      const re = new RegExp(`(?:^|[^A-Za-z])${escapeReg(key)}(?:[^A-Za-z]|$)`, "i");
-      return re.test(name);
+function uniq(arr) {
+  const seen = {};
+  const out = [];
+  arr.forEach(function (x) {
+    const v = String(x || "").trim();
+    if (!v) return;
+    const key = v.toLowerCase();
+    if (!seen[key]) {
+      seen[key] = true;
+      out.push(v);
     }
-    return name.includes(key);
+  });
+  return out;
+}
+
+function isAsciiLike(s) {
+  return /^[A-Za-z0-9 _.\-]+$/.test(String(s || ""));
+}
+
+function isCodeLike(s) {
+  return /^[A-Za-z]{2,3}$/.test(String(s || ""));
+}
+
+function matchAlias(text, alias) {
+  const source = String(text || "");
+  const a = String(alias || "").trim();
+  if (!a) return false;
+
+  if (/[\u4e00-\u9fff]/.test(a) || /[^\x00-\x7F]/.test(a)) {
+    return source.indexOf(a) !== -1;
   }
 
-  const ascii = isAsciiWord(key);
-  const re = ascii
-    ? new RegExp(`(?:^|[^A-Za-z0-9])${escapeReg(key)}(?:[^A-Za-z0-9]|$)`, "i")
-    : new RegExp(`(?:^|[^\\u4e00-\\u9fffA-Za-z0-9])${escapeReg(key)}(?:[^\\u4e00-\\u9fffA-Za-z0-9]|$)`, "i");
-  return re.test(name);
+  const escaped = escapeReg(a).replace(/\\ /g, "\\s*");
+
+  if (isCodeLike(a)) {
+    const reCode = new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i");
+    return reCode.test(source);
+  }
+
+  if (isAsciiLike(a)) {
+    const reAscii = new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i");
+    return reAscii.test(source);
+  }
+
+  return source.toLowerCase().indexOf(a.toLowerCase()) !== -1;
+}
+
+function splitPlusKeys(str) {
+  return String(str || "")
+    .split("+")
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+}
+
+function hasAnyKey(text, keysText) {
+  const keys = splitPlusKeys(keysText);
+  for (let i = 0; i < keys.length; i++) {
+    if (matchAlias(text, keys[i])) return true;
+  }
+  return false;
+}
+
+function displayRegion(region) {
+  if (outputMode === "en" || outputMode === "us") return region.en;
+  if (outputMode === "quan") return region.quan;
+  if (outputMode === "gq" || outputMode === "flag") return region.flag;
+  return region.zh;
+}
+
+function regionPriority(zh) {
+  return REGION_PRIORITY_MAP.hasOwnProperty(zh) ? REGION_PRIORITY_MAP[zh] : 9999;
+}
+
+function getProtocolPriority(protoName) {
+  return PROTOCOL_PRIORITY_MAP.hasOwnProperty(protoName) ? PROTOCOL_PRIORITY_MAP[protoName] : 9999;
 }
 
 function normalizeProtocolInfo(proxy) {
@@ -455,79 +383,41 @@ function normalizeProtocolInfo(proxy) {
     .replace(/\s+/g, "")
     .replace(/[-_]/g, "");
 
-  const protocolInfoMap = {
-    anytls:      { full: "AnyTLS",    short: "AT",   sort: "AnyTLS" },
-    hysteria2:   { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
-    hy2:         { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
-    tuic:        { full: "TUIC",      short: "TUIC", sort: "TUIC" },
-    hysteria:    { full: "Hysteria",  short: "HY",   sort: "Hysteria" },
-    vless:       { full: "VLESS",     short: "VL",   sort: "VLESS" },
-    trojan:      { full: "Trojan",    short: "TR",   sort: "Trojan" },
-    wireguard:   { full: "WireGuard", short: "WG",   sort: "WireGuard" },
-    wg:          { full: "WireGuard", short: "WG",   sort: "WireGuard" },
-    juicity:     { full: "Juicity",   short: "JC",   sort: "Juicity" },
-    naive:       { full: "Naive",     short: "NV",   sort: "Naive" },
-    vmess:       { full: "VMess",     short: "VM",   sort: "VMess" },
-    ss:          { full: "SS",        short: "SS",   sort: "SS" },
-    shadowsocks: { full: "SS",        short: "SS",   sort: "SS" },
-    ssr:         { full: "SSR",       short: "SSR",  sort: "SSR" },
-    shadowsocksr:{ full: "SSR",       short: "SSR",  sort: "SSR" },
-    socks5:      { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
-    socks:       { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
-    http:        { full: "HTTP",      short: "HT",   sort: "HTTP" },
-    https:       { full: "HTTPS",     short: "HS",   sort: "HTTPS" },
-    snell:       { full: "Snell",     short: "SN",   sort: "Snell" },
-    brook:       { full: "Brook",     short: "BK",   sort: "Brook" },
-    ssh:         { full: "SSH",       short: "SSH",  sort: "SSH" }
+  const m = {
+    anytls:       { full: "AnyTLS",    short: "AT",   sort: "AnyTLS" },
+    hysteria2:    { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
+    hy2:          { full: "Hysteria2", short: "HY2",  sort: "Hysteria2" },
+    tuic:         { full: "TUIC",      short: "TUIC", sort: "TUIC" },
+    hysteria:     { full: "Hysteria",  short: "HY",   sort: "Hysteria" },
+    vless:        { full: "VLESS",     short: "VL",   sort: "VLESS" },
+    trojan:       { full: "Trojan",    short: "TR",   sort: "Trojan" },
+    wireguard:    { full: "WireGuard", short: "WG",   sort: "WireGuard" },
+    wg:           { full: "WireGuard", short: "WG",   sort: "WireGuard" },
+    juicity:      { full: "Juicity",   short: "JC",   sort: "Juicity" },
+    naive:        { full: "Naive",     short: "NV",   sort: "Naive" },
+    vmess:        { full: "VMess",     short: "VM",   sort: "VMess" },
+    ss:           { full: "SS",        short: "SS",   sort: "SS" },
+    shadowsocks:  { full: "SS",        short: "SS",   sort: "SS" },
+    ssr:          { full: "SSR",       short: "SSR",  sort: "SSR" },
+    shadowsocksr: { full: "SSR",       short: "SSR",  sort: "SSR" },
+    socks5:       { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
+    socks:        { full: "SOCKS5",    short: "S5",   sort: "SOCKS5" },
+    http:         { full: "HTTP",      short: "HT",   sort: "HTTP" },
+    https:        { full: "HTTPS",     short: "HS",   sort: "HTTPS" },
+    snell:        { full: "Snell",     short: "SN",   sort: "Snell" },
+    brook:        { full: "Brook",     short: "BK",   sort: "Brook" },
+    ssh:          { full: "SSH",       short: "SSH",  sort: "SSH" }
   };
 
-  const hit = protocolInfoMap[raw];
-  if (hit) return hit;
+  if (m[raw]) return m[raw];
 
   const fallback = raw ? raw.toUpperCase() : "";
-  return {
-    full: fallback,
-    short: fallback,
-    sort: fallback
-  };
-}
-
-function getProtocolPriority(protoName) {
-  return Object.prototype.hasOwnProperty.call(PROTOCOL_PRIORITY_MAP, protoName)
-    ? PROTOCOL_PRIORITY_MAP[protoName]
-    : 9999;
-}
-
-function getList(arg) {
-  switch (arg) {
-    case "us": return EN;
-    case "gq": return FG;
-    case "quan": return QC;
-    default: return ZH;
-  }
-}
-
-function applyBasicReplacement(name) {
-  let n = name;
-  Object.keys(BASIC_REPLACE_RULES).forEach((key) => {
-    const re = BASIC_REPLACE_RULES[key];
-    if (re.test(n)) n = n.replace(re, key);
-  });
-  return n;
-}
-
-function applyRegionNormalization(name) {
-  let n = name;
-  REGION_NORMALIZE_RULES.forEach(([zhName, re]) => {
-    if (re.test(n) && !n.includes(zhName)) {
-      n += ` ${zhName}`;
-    }
-  });
-  return n;
+  return { full: fallback, short: fallback, sort: fallback };
 }
 
 function parseMultiplierText(name) {
-  const match = name.match(/((倍率|X|x|×)\D?((\d{1,3}\.)?\d+)\D?)|(((\d{1,3}\.)?\d+))(倍|X|x|×)/i);
+  const s = String(name || "");
+  const match = s.match(/((倍率|X|x|×)\D?((\d{1,3}\.)?\d+)\D?)|(((\d{1,3}\.)?\d+))(倍|X|x|×)/i);
   if (!match) return "";
   const numMatch = match[0].match(/(\d[\d.]*)/);
   const rev = numMatch ? numMatch[0] : "1";
@@ -541,64 +431,123 @@ function parseMultiplierNum(text) {
   return m ? parseFloat(m[0]) : (default1x ? 1 : Number.POSITIVE_INFINITY);
 }
 
-function getCanonicalZhByOutput(countryName) {
-  const outList = getList(outputName);
-  const idx = outList.indexOf(countryName);
-  return idx !== -1 ? ZH[idx] : countryName;
-}
+// ==================== REGION_DB 构建 ====================
+function buildRegionDb() {
+  const map = {};
 
-function getRegionPriority(canonicalZh) {
-  return Object.prototype.hasOwnProperty.call(REGION_PRIORITY_MAP, canonicalZh)
-    ? REGION_PRIORITY_MAP[canonicalZh]
-    : 9999;
-}
-
-function splitPlusKeys(str) {
-  return String(str || "")
-    .split("+")
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
-function hasPurityMark(sourceText) {
-  if (!purity) return false;
-  const keys = splitPlusKeys(PURITY_KEYS);
-  if (!keys.length) return false;
-  const text = String(sourceText || "");
-  return keys.some(k => text.toLowerCase().includes(k.toLowerCase()));
-}
-
-// ==================== 最终排序与编号 ====================
-// 顺序：地区 -> 倍率 -> 协议 -> 净字标识 -> 标签 -> 原始顺序。
-// 注意：这里会改写节点 name 并重排数组顺序，Sub-Store 输出到 Surge / Shadowrocket 时都会继承这个顺序。
-function sortAndSerialByRegion(pro) {
-  const regionMap = {};
-
-  for (const proxy of pro) {
-    const regionKey = proxy._countryName || "__UNKNOWN__";
-    if (!regionMap[regionKey]) {
-      regionMap[regionKey] = [];
-    }
-    regionMap[regionKey].push(proxy);
+  for (let i = 0; i < ZH.length; i++) {
+    const zh = ZH[i];
+    map[zh] = {
+      zh: zh,
+      en: EN[i],
+      quan: QC[i],
+      flag: FG[i],
+      aliases: [zh, EN[i], QC[i], FG[i]]
+    };
   }
 
-  const regionEntries = Object.entries(regionMap);
+  EXTRA_REGIONS.forEach(function (r) {
+    map[r.zh] = {
+      zh: r.zh,
+      en: r.en,
+      quan: r.quan,
+      flag: r.flag,
+      aliases: [r.zh, r.en, r.quan, r.flag].concat(r.aliases || [])
+    };
+  });
 
-  regionEntries.sort((a, b) => {
-    const aZh = a[1][0]?._canonicalZh || a[0];
-    const bZh = b[1][0]?._canonicalZh || b[0];
+  Object.keys(REGION_ALIAS_EXTRA).forEach(function (zh) {
+    if (!map[zh]) return;
+    map[zh].aliases = map[zh].aliases.concat(REGION_ALIAS_EXTRA[zh]);
+  });
 
-    const pa = getRegionPriority(aZh);
-    const pb = getRegionPriority(bZh);
+  const db = Object.keys(map).map(function (zh) {
+    const r = map[zh];
+    r.aliases = uniq(r.aliases);
+
+    r.aliases.sort(function (a, b) {
+      const ac = isCodeLike(a) ? 1 : 0;
+      const bc = isCodeLike(b) ? 1 : 0;
+      if (ac !== bc) return ac - bc;
+      return String(b).length - String(a).length;
+    });
+
+    r.priority = regionPriority(r.zh);
+    return r;
+  });
+
+  db.sort(function (a, b) {
+    if (a.priority !== b.priority) return a.priority - b.priority;
+
+    const aMax = a.aliases.reduce(function (m, x) { return Math.max(m, String(x).length); }, 0);
+    const bMax = b.aliases.reduce(function (m, x) { return Math.max(m, String(x).length); }, 0);
+    if (aMax !== bMax) return bMax - aMax;
+
+    return String(a.zh).localeCompare(String(b.zh), "zh-Hans-CN");
+  });
+
+  return db;
+}
+
+const REGION_DB = buildRegionDb();
+
+function matchRegion(name) {
+  const text = String(name || "");
+  let best = null;
+
+  for (let i = 0; i < REGION_DB.length; i++) {
+    const r = REGION_DB[i];
+
+    for (let j = 0; j < r.aliases.length; j++) {
+      const a = r.aliases[j];
+
+      if (matchAlias(text, a)) {
+        const score = (isCodeLike(a) ? 0 : 10000) + String(a).length;
+        if (!best || score > best.score) {
+          best = { region: r, alias: a, score: score };
+        }
+        break;
+      }
+    }
+  }
+
+  return best ? best.region : null;
+}
+
+// ==================== 排序与编号 ====================
+function sortAndSerial(pro) {
+  const groups = {};
+
+  pro.forEach(function (p) {
+    const key = p._canonicalZh || "__UNKNOWN__";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+
+  const entries = Object.keys(groups).map(function (k) {
+    return [k, groups[k]];
+  });
+
+  entries.sort(function (a, b) {
+    const aKey = a[0];
+    const bKey = b[0];
+
+    if (aKey === "__UNKNOWN__" && bKey !== "__UNKNOWN__") return 1;
+    if (bKey === "__UNKNOWN__" && aKey !== "__UNKNOWN__") return -1;
+
+    const pa = regionPriority(aKey);
+    const pb = regionPriority(bKey);
     if (pa !== pb) return pa - pb;
 
-    return String(aZh).localeCompare(String(bZh), "zh-Hans-CN");
+    return String(aKey).localeCompare(String(bKey), "zh-Hans-CN");
   });
 
   const out = [];
 
-  regionEntries.forEach(([, group]) => {
-    group.sort((a, b) => {
+  entries.forEach(function (entry) {
+    const group = entry[1];
+
+    group.sort(function (a, b) {
       const multDiff = (a._multiplierNum || 0) - (b._multiplierNum || 0);
       if (multDiff !== 0) return multDiff;
 
@@ -609,32 +558,45 @@ function sortAndSerialByRegion(pro) {
       const protoDiff = String(a._protoSort || "").localeCompare(String(b._protoSort || ""));
       if (protoDiff !== 0) return protoDiff;
 
-      const pureDiff = Number(Boolean(b._purityTail)) - Number(Boolean(a._purityTail));
-      if (pureDiff !== 0) return pureDiff;
+      const tagRank = function (p) {
+        if (p._purityTail) return 0;
+        if (p._starTail) return 1;
+        if (p._mobileTail) return 2;
+        return 3;
+      };
 
-      const tagDiff = String(a._tagKey || "").localeCompare(String(b._tagKey || ""));
+      const tagDiff = tagRank(a) - tagRank(b);
       if (tagDiff !== 0) return tagDiff;
-
-      const retainDiff = String(a._retainKey || "").localeCompare(String(b._retainKey || ""));
-      if (retainDiff !== 0) return retainDiff;
 
       return (a._origIndex || 0) - (b._origIndex || 0);
     });
 
-    group.forEach((proxy, idx) => {
+    group.forEach(function (p, idx) {
       const seq = String(idx + 1).padStart(2, "0");
-      proxy.name = [
-        proxy._flagName,
-        proxy._countryName,
-        seq,
-        bl ? (proxy._multiplier || (default1x ? `1${XSTYLE}` : "")) : "",
-        proxy._protoName,
-        proxy._retainKey,
-        proxy._tagKey,
-        proxy._purityTail
-      ].filter(Boolean).join(FGF);
 
-      out.push(proxy);
+      if (p._isUnknown) {
+        p.name = [
+          addflag ? UNKNOWN_FLAG : "",
+          UNKNOWN_NAME,
+          seq,
+          p._unknownRawName
+        ].filter(Boolean).join(FGF);
+      } else {
+        p.name = [
+          p._flagName,
+          p._countryName,
+          seq,
+          bl ? (p._multiplier || (default1x ? "1" + XSTYLE : "")) : "",
+          p._protoName,
+          p._retainKey,
+          p._tagKey,
+          p._purityTail,
+          p._starTail,
+          p._mobileTail
+        ].filter(Boolean).join(FGF);
+      }
+
+      out.push(p);
     });
   });
 
@@ -644,158 +606,112 @@ function sortAndSerialByRegion(pro) {
 
 // ==================== 主流程 ====================
 function operator(pro) {
-  const Allmap = {};
-  const outList = getList(outputName);
-  let inputList;
-
-  if (inname !== "") {
-    inputList = [getList(inname)];
-  } else {
-    inputList = [ZH, QC, EN];
-  }
-
-  inputList.forEach((arr) => {
-    arr.forEach((value, valueIndex) => {
-      if (value && String(value).trim() !== "") {
-        Allmap[value] = outList[valueIndex];
-      }
-    });
-  });
-
   if (clear || nx || blnx || key) {
-    pro = pro.filter((res) => {
-      const resname = res.name;
-      const keep =
-        !(clear && shouldClearNodeByName(resname)) &&
-        !(nx && namenx.test(resname)) &&
-        !(blnx && !nameblnx.test(resname)) &&
-        !(key && !(keya.test(resname) && /2|4|6|7/i.test(resname)));
-      return keep;
+    pro = pro.filter(function (res) {
+      const resname = res.name || "";
+      return !(clear && nameclear.test(resname)) &&
+             !(nx && namenx.test(resname)) &&
+             !(blnx && !nameblnx.test(resname));
     });
   }
 
   const BLKEYS = BLKEY ? BLKEY.split("+") : [];
 
-  pro.forEach((e, idx) => {
-    let bktf = false;
-    const rawOriginalName = e.name;
-    let workingName = e.name;
+  pro.forEach(function (e, idx) {
+    const rawName = e.name || "";
+    const tagSource = rawName;
     let retainKey = "";
+    let tagKey = "";
+
     e._origIndex = idx;
-
-    workingName = applyBasicReplacement(workingName);
-    workingName = applyRegionNormalization(workingName);
-
-    const hadShenGang = /(深|沪|呼|京|广|杭)港/.test(rawOriginalName) || /(深|沪|呼|京|广|杭)港/.test(workingName);
-    if (hadShenGang && !workingName.includes("香港")) {
-      workingName += " 香港";
-    }
-
-    if (BLKEY) {
-      const holder = { value: "", useReplace: false };
-
-      BLKEYS.forEach((i) => {
-        if (i.includes(">")) {
-          const [from, to] = i.split(">");
-          if (from && rawOriginalName.includes(from)) {
-            if (to) {
-              holder.value = to;
-              holder.useReplace = true;
-            } else if (!workingName.includes(from)) {
-              workingName += " " + from;
-            }
-          }
-        } else if (i && rawOriginalName.includes(i) && !workingName.includes(i)) {
-          workingName += " " + i;
-        }
-      });
-
-      if (holder.useReplace) {
-        retainKey = holder.value;
-      } else {
-        retainKey = BLKEYS.filter((items) => items && !items.includes(">") && workingName.includes(items)).join(FGF);
-      }
-
-      bktf = Boolean(retainKey);
-    }
-
-    if (!bktf && BLKEY) {
-      let replaceVal = "";
-      let re = false;
-
-      BLKEYS.forEach((i) => {
-        if (i.includes(">")) {
-          const [from, to] = i.split(">");
-          if (from && workingName.includes(from)) {
-            if (to) {
-              replaceVal = to;
-              re = true;
-            }
-          }
-        }
-      });
-
-      retainKey = re ? replaceVal : BLKEYS.filter((items) => items && !items.includes(">") && workingName.includes(items)).join(FGF);
-    }
 
     if (blockquic == "on") e["block-quic"] = "on";
     else if (blockquic == "off") e["block-quic"] = "off";
     else delete e["block-quic"];
 
-    let ikeys = "";
+    if (BLKEYS.length) {
+      const retainArr = [];
+
+      BLKEYS.forEach(function (i) {
+        if (!i) return;
+
+        if (i.indexOf(">") !== -1) {
+          const parts = i.split(">");
+          const from = parts[0];
+          const to = parts[1];
+          if (from && rawName.indexOf(from) !== -1 && to) {
+            retainArr.push(to);
+          }
+        } else if (rawName.indexOf(i) !== -1) {
+          retainArr.push(i);
+        }
+      });
+
+      retainKey = uniq(retainArr).join(FGF);
+    }
+
     if (blgd) {
-      regexArray.forEach((regex, index) => {
-        if (regex.test(workingName)) ikeys = valueArray[index];
+      regexArray.forEach(function (regex, index) {
+        regex.lastIndex = 0;
+        if (regex.test(rawName)) tagKey = valueArray[index];
+        regex.lastIndex = 0;
       });
     }
 
-    let ikey = "";
+    let multiplier = "";
     if (bl) {
-      ikey = parseMultiplierText(workingName);
-      if (!ikey && default1x) ikey = "1" + XSTYLE;
+      multiplier = parseMultiplierText(rawName);
+      if (!multiplier && default1x) multiplier = "1" + XSTYLE;
     }
 
-    if (!GetK) ObjKA(Allmap);
+    const protoInfo = normalizeProtocolInfo(e);
+    const region = matchRegion(rawName);
 
-    const findKey = AMK.find(([k]) => matchWithBoundary(workingName, k));
+    const starHit = star && hasAnyKey(tagSource, STAR_KEYS);
+    const mobileHit = mobile && hasAnyKey(tagSource, MOBILE_KEYS);
+    const purityHit = purity && hasAnyKey(tagSource, PURITY_KEYS) && !starHit && !mobileHit;
 
-    if (findKey?.[1]) {
-      const countryName = findKey[1];
-      let usflag = "";
-
-      if (addflag) {
-        const idx2 = outList.indexOf(countryName);
-        if (idx2 !== -1) usflag = FG[idx2] || "";
-      }
-
-      const protoInfo = normalizeProtocolInfo(e);
-      const canonicalZh = getCanonicalZhByOutput(countryName);
-      const pureTail = hasPurityMark(`${rawOriginalName} ${workingName}`) ? PURITY_MARK : "";
-
-      e._flagName      = usflag;
-      e._countryName   = countryName;
-      e._canonicalZh   = canonicalZh;
-      e._multiplier    = ikey || "";
-      e._multiplierNum = parseMultiplierNum(ikey || (default1x ? `1${XSTYLE}` : ""));
+    if (region) {
+      e._isUnknown     = false;
+      e._flagName      = addflag ? region.flag : "";
+      e._countryName   = displayRegion(region);
+      e._canonicalZh   = region.zh;
+      e._multiplier    = multiplier;
+      e._multiplierNum = parseMultiplierNum(multiplier || (default1x ? "1" + XSTYLE : ""));
       e._protoSort     = protoInfo.sort;
       e._protoName     = proto ? (protoShort ? protoInfo.short : protoInfo.full) : "";
-      e._retainKey     = retainKey || "";
-      e._tagKey        = ikeys || "";
-      e._purityTail    = pureTail;
-      e.name = "__GROUP_READY__";
+      e._retainKey     = retainKey;
+      e._tagKey        = tagKey;
+      e._purityTail    = purityHit ? PURITY_MARK : "";
+      e._starTail      = starHit ? STAR_MARK : "";
+      e._mobileTail    = mobileHit ? MOBILE_MARK : "";
     } else {
-      if (nm) {
-        e.name = [FNAME, workingName].filter(Boolean).join(FGF);
+      if (unknown || nm) {
+        e._isUnknown     = true;
+        e._flagName      = "";
+        e._countryName   = UNKNOWN_NAME;
+        e._canonicalZh   = "__UNKNOWN__";
+        e._multiplier    = "";
+        e._multiplierNum = Number.POSITIVE_INFINITY;
+        e._protoSort     = "";
+        e._protoName     = "";
+        e._retainKey     = "";
+        e._tagKey        = "";
+        e._purityTail    = "";
+        e._starTail      = "";
+        e._mobileTail    = "";
+        e._unknownRawName = rawName;
       } else {
         e.name = null;
       }
     }
   });
 
-  pro = pro.filter((e) => e.name !== null);
-  sortAndSerialByRegion(pro);
+  pro = pro.filter(function (e) {
+    return e.name !== null;
+  });
 
-  if (key) pro = pro.filter((e) => !keyb.test(e.name));
+  sortAndSerial(pro);
 
   return pro;
 }

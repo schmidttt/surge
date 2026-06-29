@@ -1,8 +1,8 @@
 /**
- * 更新日期：2026-06-29 17:52
+ * 更新日期：2026-06-29 22:19
  * 用法：Sub-Store 脚本操作添加
  *
- * 性能优化版：常用地区 + 冷门地区兼容
+ * 多机场通用极速版：常用地区 + 冷门地区兼容
  *
  * 推荐参数：
  *   #flag=true&out=zh&proto=true&bl=true&show1x=true&default1x=true&xstyle=x
@@ -12,6 +12,15 @@
  *   🇯🇵 日本 01 10x AT 星
  *   🇰🇷 韩国 01 10x AT 移
  *   ❓ 未识别 01 原节点名
+ *
+ * 优化策略：
+ *   1. 不做完整特征预扫描，避免额外遍历
+ *   2. 中文/非 ASCII 别名首字索引，命中即返回
+ *   3. 国旗使用 Map 直查，不再全量扫描
+ *   4. 尾部地区码仅在“包含 | 且末尾大写代码”时触发
+ *   5. 普通大写地区码使用安全 Map，排除 SS / NF
+ *   6. 英文长别名预编译，最后兜底
+ *   7. 净 / 星 / 移关键词预编译缓存
  */
 
 const inArg = $arguments;
@@ -69,7 +78,8 @@ const FGF          = inArg.fgf == undefined ? " " : decodeURI(inArg.fgf),
         ? "5G网络+5G+Mobile+移动+蜂窝+LTE"
         : decodeURI(inArg.mobileKeys);
 
-// 容易和协议/能力标签冲突的地区码，不作为代码强匹配
+// 容易和协议/能力标签冲突的地区码，不作为“普通代码”强匹配。
+// 但在“尾部地区码”场景中仍可识别。
 const DISABLED_CODE_ALIASES = {
   SS: true, // South Sudan / Shadowsocks SS
   NF: true  // Norfolk Island / Netflix NF
@@ -273,16 +283,6 @@ function splitPlusKeys(str) {
   }).filter(Boolean);
 }
 
-function tokenList(text) {
-  const out = [];
-  const re = /(^|[^A-Za-z0-9])([A-Z]{2,3})(?=[^A-Za-z0-9]|$)/g;
-  let m;
-  while ((m = re.exec(String(text || ""))) !== null) {
-    out.push(m[2]);
-  }
-  return out;
-}
-
 function displayRegion(region) {
   if (outputMode === "en" || outputMode === "us") return region.en;
   if (outputMode === "quan") return region.quan;
@@ -355,9 +355,14 @@ function parseMultiplierNum(text) {
 
 // ==================== 地区匹配器构建：性能优化核心 ====================
 const CODE_REGION_MAP = {};
-const FLAG_MATCHERS = [];
+const CODE_REGION_MAP_ALL = {};
+const FLAG_REGION_MAP = {};
 const CJK_MATCHERS_BY_FIRST = {};
 const ASCII_MATCHERS = [];
+
+const TAIL_CODE_RE = /\|\s*(?:(?:\d+(?:\.\d+)?)\s*(?:x|X|×|倍)\s*)?([A-Z]{2,3})\s*$/;
+const TOKEN_CODE_RE = /(^|[^A-Za-z0-9])([A-Z]{2,3})(?=[^A-Za-z0-9]|$)/g;
+const FLAG_RE = /[\uD83C][\uDDE6-\uDDFF][\uD83C][\uDDE6-\uDDFF]/g;
 
 function addCjkMatcher(alias, region, score) {
   const first = alias.charAt(0);
@@ -385,23 +390,25 @@ function buildRegionDbAndMatchers() {
   for (let i = 0; i < ZH.length; i++) {
     const zh = ZH[i];
     const flag = FG[i] || flagFromCode(EN[i]);
+
     map[zh] = {
       zh: zh,
       en: EN[i],
       quan: QC[i],
       flag: flag,
-      aliases: [zh, EN[i], QC[i], flag]
+      aliases: [zh, EN[i], QC[i]]
     };
   }
 
   EXTRA_REGIONS.forEach(function (r) {
     const flag = r.flag || flagFromCode(r.en);
+
     map[r.zh] = {
       zh: r.zh,
       en: r.en,
       quan: r.quan,
       flag: flag,
-      aliases: [r.zh, r.en, r.quan, flag].concat(r.aliases || [])
+      aliases: [r.zh, r.en, r.quan].concat(r.aliases || [])
     };
   });
 
@@ -412,28 +419,46 @@ function buildRegionDbAndMatchers() {
 
   const db = Object.keys(map).map(function (zh) {
     const r = map[zh];
+
     r.aliases = uniq(r.aliases).filter(function (a) {
       return !(isCodeLike(a) && isDisabledCodeAlias(a));
     });
+
     r.priority = regionPriority(r.zh);
     return r;
   });
 
   db.forEach(function (region) {
     const flag = regionFlag(region);
-    if (flag) FLAG_MATCHERS.push({ alias: flag, region: region, score: 5000 });
+    if (flag) FLAG_REGION_MAP[flag] = region;
+
+    const code = String(region.en || "").toUpperCase();
+
+    if (code && !CODE_REGION_MAP_ALL[code]) {
+      CODE_REGION_MAP_ALL[code] = region;
+    }
+
+    if (code && !isDisabledCodeAlias(code) && !CODE_REGION_MAP[code]) {
+      CODE_REGION_MAP[code] = region;
+    }
 
     region.aliases.forEach(function (alias) {
       const a = String(alias || "").trim();
       if (!a || a === flag) return;
 
       if (isCodeLike(a)) {
-        if (!isDisabledCodeAlias(a)) {
-          const code = a.toUpperCase();
-          if (!CODE_REGION_MAP[code] || region.priority < CODE_REGION_MAP[code].priority) {
-            CODE_REGION_MAP[code] = region;
+        const c = a.toUpperCase();
+
+        if (!CODE_REGION_MAP_ALL[c] || region.priority < CODE_REGION_MAP_ALL[c].priority) {
+          CODE_REGION_MAP_ALL[c] = region;
+        }
+
+        if (!isDisabledCodeAlias(c)) {
+          if (!CODE_REGION_MAP[c] || region.priority < CODE_REGION_MAP[c].priority) {
+            CODE_REGION_MAP[c] = region;
           }
         }
+
         return;
       }
 
@@ -457,23 +482,17 @@ function buildRegionDbAndMatchers() {
     return b.score - a.score;
   });
 
-  FLAG_MATCHERS.sort(function (a, b) {
-    return b.score - a.score;
-  });
-
   return db;
 }
 
 const REGION_DB = buildRegionDbAndMatchers();
 
-function matchRegion(name) {
-  const text = String(name || "");
-  let best = null;
-
-  // 1. 中文/非 ASCII 别名：按首字索引，不再全量扫描
+function matchCjkRegion(text) {
   const checkedFirst = {};
+
   for (let i = 0; i < text.length; i++) {
     const ch = text.charAt(i);
+
     if (checkedFirst[ch]) continue;
     checkedFirst[ch] = true;
 
@@ -482,63 +501,133 @@ function matchRegion(name) {
 
     for (let j = 0; j < list.length; j++) {
       const m = list[j];
+
       if (text.indexOf(m.alias) !== -1) {
-        if (!best || m.score > best.score) best = m;
-        break;
+        return m.region;
       }
     }
   }
 
-  // 中文名命中基本已经足够准确，直接返回，避免再扫英文库
-  if (best && best.score >= 10000) return best.region;
-
-  // 2. 大写地区码：Map 快速查
-  const tokens = tokenList(text);
-  for (let t = 0; t < tokens.length; t++) {
-    const r = CODE_REGION_MAP[tokens[t]];
-    if (r) {
-      const score = 100 + tokens[t].length;
-      if (!best || score > best.score) best = { region: r, score: score };
-    }
-  }
-
-  // 3. 国旗匹配
-  for (let f = 0; f < FLAG_MATCHERS.length; f++) {
-    const m = FLAG_MATCHERS[f];
-    if (text.indexOf(m.alias) !== -1) {
-      if (!best || m.score > best.score) best = m;
-      break;
-    }
-  }
-
-  // 4. 英文长别名预编译匹配
-  for (let a = 0; a < ASCII_MATCHERS.length; a++) {
-    const m = ASCII_MATCHERS[a];
-    if (m.re.test(text)) {
-      if (!best || m.score > best.score) best = m;
-      break;
-    }
-  }
-
-  return best ? best.region : null;
+  return null;
 }
 
-function hasAnyKey(text, keysText) {
+function matchFlagRegion(text) {
+  FLAG_RE.lastIndex = 0;
+
+  let m;
+  while ((m = FLAG_RE.exec(text)) !== null) {
+    const r = FLAG_REGION_MAP[m[0]];
+    if (r) return r;
+  }
+
+  return null;
+}
+
+function matchTailCodeRegion(text) {
+  if (text.indexOf("|") === -1) return null;
+  if (!/[A-Z]\s*$/.test(text)) return null;
+
+  const m = text.match(TAIL_CODE_RE);
+  if (!m || !m[1]) return null;
+
+  return CODE_REGION_MAP_ALL[m[1].toUpperCase()] || null;
+}
+
+function matchTokenCodeRegion(text) {
+  TOKEN_CODE_RE.lastIndex = 0;
+
+  let m;
+  while ((m = TOKEN_CODE_RE.exec(text)) !== null) {
+    const r = CODE_REGION_MAP[m[2]];
+    if (r) return r;
+  }
+
+  return null;
+}
+
+function matchAsciiRegion(text) {
+  for (let i = 0; i < ASCII_MATCHERS.length; i++) {
+    const m = ASCII_MATCHERS[i];
+
+    m.re.lastIndex = 0;
+
+    if (m.re.test(text)) {
+      return m.region;
+    }
+  }
+
+  return null;
+}
+
+function matchRegion(name) {
+  const text = String(name || "");
+
+  const cjk = matchCjkRegion(text);
+  if (cjk) return cjk;
+
+  const flag = matchFlagRegion(text);
+  if (flag) return flag;
+
+  const tail = matchTailCodeRegion(text);
+  if (tail) return tail;
+
+  const code = matchTokenCodeRegion(text);
+  if (code) return code;
+
+  return matchAsciiRegion(text);
+}
+
+// ==================== 净 / 星 / 移关键词缓存 ====================
+const KEY_MATCHER_CACHE = {};
+
+function buildKeyMatchers(keysText) {
+  const cacheKey = String(keysText || "");
+  if (KEY_MATCHER_CACHE[cacheKey]) return KEY_MATCHER_CACHE[cacheKey];
+
   const keys = splitPlusKeys(keysText);
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i];
-    if (!k) continue;
+  const matchers = [];
+
+  keys.forEach(function (k) {
+    if (!k) return;
 
     if (/[\u4e00-\u9fff]/.test(k) || /[^\x00-\x7F]/.test(k)) {
-      if (String(text).indexOf(k) !== -1) return true;
+      matchers.push({
+        type: "plain",
+        value: k
+      });
     } else {
       const escaped = escapeReg(k).replace(/\\ /g, "\\s*");
+
       const re = isCodeLike(k)
         ? new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)")
         : new RegExp("(^|[^A-Za-z0-9])" + escaped + "([^A-Za-z0-9]|$)", "i");
-      if (re.test(String(text || ""))) return true;
+
+      matchers.push({
+        type: "regex",
+        re: re
+      });
+    }
+  });
+
+  KEY_MATCHER_CACHE[cacheKey] = matchers;
+  return matchers;
+}
+
+function hasAnyKey(text, keysText) {
+  const source = String(text || "");
+  const matchers = buildKeyMatchers(keysText);
+
+  for (let i = 0; i < matchers.length; i++) {
+    const m = matchers[i];
+
+    if (m.type === "plain") {
+      if (source.indexOf(m.value) !== -1) return true;
+    } else {
+      m.re.lastIndex = 0;
+      if (m.re.test(source)) return true;
     }
   }
+
   return false;
 }
 
